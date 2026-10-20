@@ -69,6 +69,25 @@ public final class BlockingQueueExchange<T> implements Exchange<T> {
 		}
 	}
 
+	/**
+	 * Non-blocking variant of {@link #send(Object)}: returns {@code false} instead of
+	 * blocking when there is no room.
+	 * @param item the item to add
+	 * @return whether the item was accepted
+	 * @throws SinkCompleteException if the Sink was already completed, or closed
+	 * from the Source side
+	 */
+	public boolean offer(T item) {
+		if (this.closed) {
+			throw new SinkCompleteException("Exchange closed from the Source side");
+		}
+		Completion c = this.completion;
+		if (c != null) {
+			throw new SinkCompleteException("Already completed", c.exception());
+		}
+		return this.queue.offer(item);
+	}
+
 	@Override
 	public void complete() {
 		completeInternal(null);

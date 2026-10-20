@@ -9,8 +9,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.locks.LockSupport;
 
 import io.spring.streamsource.Source;
 import org.jspecify.annotations.Nullable;
@@ -23,7 +22,7 @@ import org.slf4j.LoggerFactory;
  * Created through {@link FlowSourceAdapter#toPublisher(Source)}.
  *
  * <p>The loop thread is where the blocking happens, and demand is what it waits for:
- * with no outstanding {@code request(n)} it parks on a condition rather than calling
+ * with no outstanding {@code request(n)} it parks rather than calling
  * {@link Source#receiveNext()}, so nothing is received that nobody asked for. Because
  * the loop parks, the executor must be one where blocking is allowed.
  *
@@ -62,9 +61,16 @@ final class SourcePublisher<T> implements Publisher<T> {
 		ReceiveLoop<T> loop = new ReceiveLoop<>(this.source, subscriber);
 		subscriber.onSubscribe(loop);
 		if (loop.isCancelled()) {
-			// Cancelled from onSubscribe, nothing to run, but an invalid request(n)
-			// there still has an error to report, and no loop thread to do it.
+			// Cancelled from onSubscribe: no loop thread will ever run, so nothing
+			// will reach the finally in run() that closes the Source; hand that off
+			// to the executor instead of closing here, on what may be an NIO thread.
 			loop.signalPendingError();
+			try {
+				this.executor.execute(this.source::close);
+			}
+			catch (RejectedExecutionException ex) {
+				this.source.close();
+			}
 			return;
 		}
 		try {
@@ -93,15 +99,14 @@ final class SourcePublisher<T> implements Publisher<T> {
 
 		private final Subscriber<? super T> actual;
 
-		private final ReentrantLock lock = new ReentrantLock();
-
-		private final Condition demandAvailable = this.lock.newCondition();
-
 		/** Outstanding demand, {@code Long.MAX_VALUE} meaning unbounded. */
 		private final AtomicLong requested = new AtomicLong();
 
 		/** Error from an invalid {@code request(n)}, signalled by the loop thread. */
 		private final AtomicReference<@Nullable Throwable> pendingError = new AtomicReference<>();
+
+		/** Set by {@link #run()} itself, so the signal side has something to wake or interrupt. */
+		private volatile @Nullable Thread loopThread;
 
 		private volatile boolean cancelled;
 
@@ -126,41 +131,39 @@ final class SourcePublisher<T> implements Publisher<T> {
 				}
 				return;
 			}
-			this.lock.lock();
-			try {
-				this.requested.getAndUpdate(r -> {
-					long sum = r + n;
-					return (sum < 0 ? Long.MAX_VALUE : sum);
-				});
-				this.demandAvailable.signal();
-			}
-			finally {
-				this.lock.unlock();
-			}
+			this.requested.getAndUpdate(r -> {
+				long sum = r + n;
+				return (sum < 0 ? Long.MAX_VALUE : sum);
+			});
+			unpark();
 		}
 
 		/**
 		 * {@inheritDoc}
-		 * <p>Closing the Source is what unblocks a receive that is already in progress,
-		 * so that is done here rather than left to the loop thread, which may be parked
-		 * in {@link Source#receiveNext()} with no reason to return. It follows that this
-		 * blocks for as long as the Source takes to close, and that the Source sees
-		 * {@code close()} from the cancelling thread.
+		 * <p>Interrupts the loop thread instead of closing the Source directly, so this
+		 * never blocks the calling thread. The interrupt unblocks a receive already in
+		 * progress the same way an unpark unblocks a parked wait for demand; the loop
+		 * thread closes the Source itself, from {@link #run()}, since only that thread
+		 * may block.
 		 */
 		@Override
 		public void cancel() {
 			if (this.cancelled) {
 				return;
 			}
-			this.lock.lock();
-			try {
-				this.cancelled = true;
-				this.demandAvailable.signal();
+			this.cancelled = true;
+			Thread thread = this.loopThread;
+			if (thread != null) {
+				// Also unblocks a parked awaitDemand(), same as unpark() would
+				thread.interrupt();
 			}
-			finally {
-				this.lock.unlock();
+		}
+
+		private void unpark() {
+			Thread thread = this.loopThread;
+			if (thread != null) {
+				LockSupport.unpark(thread);
 			}
-			this.source.close();
 		}
 
 		boolean isCancelled() {
@@ -189,6 +192,7 @@ final class SourcePublisher<T> implements Publisher<T> {
 
 		@Override
 		public void run() {
+			this.loopThread = Thread.currentThread();
 			try {
 				while (awaitDemand()) {
 					if (!this.source.receiveNext()) {
@@ -219,19 +223,15 @@ final class SourcePublisher<T> implements Publisher<T> {
 
 		/**
 		 * Park until there is demand to receive one more item, and report whether the
-		 * loop should carry on.
+		 * loop should carry on. A permit made available by {@link #unpark()} before
+		 * this parks is not lost, so a {@code request(n)} racing with the check below
+		 * still wakes it.
 		 */
-		private boolean awaitDemand() throws InterruptedException {
-			this.lock.lock();
-			try {
-				while (!this.cancelled && this.requested.get() == 0) {
-					this.demandAvailable.await();
-				}
-				return !this.cancelled;
+		private boolean awaitDemand() {
+			while (!this.cancelled && this.requested.get() == 0) {
+				LockSupport.park();
 			}
-			finally {
-				this.lock.unlock();
-			}
+			return !this.cancelled;
 		}
 
 		private void produced() {
@@ -254,8 +254,8 @@ final class SourcePublisher<T> implements Publisher<T> {
 				}
 				else {
 					// Nobody left to report to, and typically the Source unwinding from
-					// the close() that cancel() did, like the SocketException from an
-					// interrupted read.
+					// the interrupt that cancel() sent, like a ClosedByInterruptException
+					// from an interrupted read.
 					logger.debug("cancelled, discarding {}", ex.toString());
 				}
 			}

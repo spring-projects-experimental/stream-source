@@ -60,3 +60,29 @@ test {
 		exceptionFormat = 'full'
 	}
 }
+
+// A separate suite since BlockHound instruments the whole JVM once installed.
+testing {
+	suites {
+		blockhound(JvmTestSuite) {
+			useJUnitJupiter(junitVersion)
+			dependencies {
+				implementation project()
+				implementation "io.projectreactor:reactor-core:$reactorVersion"
+				implementation 'io.projectreactor.tools:blockhound:1.0.17.RELEASE'
+				implementation 'org.assertj:assertj-core:3.27.7'
+			}
+			targets {
+				all {
+					testTask.configure {
+						jvmArgs '-XX:+AllowRedefinitionToAddDeleteMethods', '-Djdk.attach.allowAttachSelf=true'
+					}
+				}
+			}
+		}
+	}
+}
+
+check {
+	dependsOn testing.suites.blockhound
+}

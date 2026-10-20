@@ -17,20 +17,15 @@ import org.jspecify.annotations.Nullable;
  * receives items nobody asked for:
  * <ul>
  * <li>{@link #toPublisher(Source)} receives on a background thread, and only while there
- * is outstanding {@code request(n)}. Cancelling closes the Source.
+ * is outstanding demand. Cancelling closes the Source.
  * <li>{@link #toSource(Publisher)} subscribes on the first receive, and requests as many
  * items as the buffer can hold, one more each time the consumer takes one out. Closing
  * the Source cancels the subscription.
  * </ul>
- *
- * <p>Being based on {@link java.util.concurrent.Flow}, this adapter requires no extra
- * dependency. See {@code reactor.adapter.streamsource.SourceAdapter} for the Reactor
- * variant, based on {@code reactor.core.publisher.Flux}.
  */
 public abstract class FlowSourceAdapter {
 
 	private static final @Nullable Executor defaultExecutor = createDefaultExecutor();
-
 
 	private FlowSourceAdapter() {
 	}
@@ -47,8 +42,9 @@ public abstract class FlowSourceAdapter {
 	 * signalled by the {@code request(n)} that follows the last item: a subscriber that
 	 * stops requesting after exactly as many items as the Source had does not see
 	 * {@code onComplete} until it asks again.
-	 * <p>Cancelling closes the Source, which is what unblocks a receive that is already
-	 * in progress, and therefore blocks for as long as that takes.
+	 * <p>Cancelling interrupts the receive loop rather than closing the Source directly,
+	 * which is what unblocks a receive that is already in progress; the loop then closes
+	 * the Source itself, so cancelling never blocks the calling thread.
 	 * <p>Requires Java 21+, use {@link #toPublisher(Source, Executor)} on Java &lt; 21.
 	 * @param source the source to receive from
 	 * @return a Publisher that emits the items of the Source

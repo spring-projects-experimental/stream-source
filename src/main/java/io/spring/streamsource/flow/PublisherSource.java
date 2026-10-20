@@ -9,6 +9,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import io.spring.streamsource.BlockingQueueExchange;
+import io.spring.streamsource.SinkCompleteException;
 import io.spring.streamsource.Source;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
@@ -143,23 +144,29 @@ final class PublisherSource<T> implements Source<T> {
 			}
 			if (this.outstanding.decrementAndGet() < 0) {
 				// Only reachable if the publisher sent more than it was asked for
-				cancel();
-				exchange.completeExceptionally(new IllegalStateException(
-						"Publisher exceeded its demand of " + capacity + " items: " + publisher));
+				demandExceeded();
 				return;
 			}
 			try {
-				exchange.send(item);
+				if (!exchange.offer(item)) {
+					// The demand accounting above should make this unreachable. Should it
+					// break, offer fails where send would park this thread on a full
+					// queue. Both take the queue's locks, but unlike send, offer does not
+					// throw when this thread happens to have its interrupt flag set
+					demandExceeded();
+				}
 			}
-			catch (IllegalStateException ex) {
+			catch (SinkCompleteException ex) {
 				// The consumer closed the Source while this item was in flight
 				logger.debug("discarding item received after close: {}", item);
 				cancel();
 			}
-			catch (InterruptedException ex) {
-				Thread.currentThread().interrupt();
-				cancel();
-			}
+		}
+
+		private void demandExceeded() {
+			cancel();
+			exchange.completeExceptionally(new IllegalStateException(
+					"Publisher exceeded its demand of " + capacity + " items: " + publisher));
 		}
 
 		@Override

@@ -72,7 +72,10 @@ public class SourcePublisherTests {
 				.then(() -> await(source.receiving))
 				.thenCancel()
 				.verify();
-		assertThat(source.unblocked.await(5, TimeUnit.SECONDS)).isTrue();
+		// cancel() interrupts the loop thread rather than closing synchronously; this is
+		// proof the interrupt reached the blocked receive, not just that it eventually
+		// returned some other way
+		assertThat(source.interrupted.await(5, TimeUnit.SECONDS)).isTrue();
 	}
 
 	@Test
@@ -104,11 +107,14 @@ public class SourcePublisherTests {
 	}
 
 	@Test
-	public void requestZeroSignalsIllegalArgumentException() {
+	public void requestZeroSignalsIllegalArgumentException() throws InterruptedException {
 		ListSource<String> source = new ListSource<>("a", "b", "c");
 		StepVerifier.create(JdkFlowAdapter.flowPublisherToFlux(FlowSourceAdapter.toPublisher(source)), 0)
 				.consumeSubscriptionWith(subscription -> subscription.request(0))
 				.verifyError(IllegalArgumentException.class);
+		// Cancelled from onSubscribe, before the loop was ever scheduled: closing the
+		// Source is handed off to the executor rather than skipped
+		assertThat(source.closed.await(5, TimeUnit.SECONDS)).isTrue();
 	}
 
 	@Test
@@ -142,12 +148,13 @@ public class SourcePublisherTests {
 		}
 	}
 
-
 	private static final class ListSource<T> extends AbstractSource<T> {
 
 		private final Iterator<T> iterator;
 
 		private final AtomicInteger receives = new AtomicInteger();
+
+		private final CountDownLatch closed = new CountDownLatch(1);
 
 		@SafeVarargs
 		ListSource(T... items) {
@@ -158,6 +165,11 @@ public class SourcePublisherTests {
 		protected @Nullable T receiveItem() {
 			this.receives.incrementAndGet();
 			return (this.iterator.hasNext() ? this.iterator.next() : null);
+		}
+
+		@Override
+		protected void handleClose(@Nullable Throwable cause) {
+			this.closed.countDown();
 		}
 	}
 
@@ -175,27 +187,27 @@ public class SourcePublisherTests {
 
 
 	/**
-	 * Source whose receive blocks until it is closed.
+	 * Source whose receive blocks, interruptibly, until cancelled.
 	 */
 	private static final class BlockingSource extends AbstractSource<String> {
 
 		private final CountDownLatch receiving = new CountDownLatch(1);
 
-		private final CountDownLatch closed = new CountDownLatch(1);
+		private final CountDownLatch neverCompletes = new CountDownLatch(1);
 
-		private final CountDownLatch unblocked = new CountDownLatch(1);
+		private final CountDownLatch interrupted = new CountDownLatch(1);
 
 		@Override
 		protected @Nullable String receiveItem() throws InterruptedException {
 			this.receiving.countDown();
-			this.closed.await();
-			this.unblocked.countDown();
+			try {
+				this.neverCompletes.await();
+			}
+			catch (InterruptedException ex) {
+				this.interrupted.countDown();
+				throw ex;
+			}
 			return null;
-		}
-
-		@Override
-		protected void handleClose(@Nullable Throwable cause) {
-			this.closed.countDown();
 		}
 	}
 
