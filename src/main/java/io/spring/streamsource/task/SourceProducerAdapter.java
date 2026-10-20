@@ -9,7 +9,7 @@ import org.slf4j.LoggerFactory;
  * {@link Producer} that produces items consumed from a {@link Source}.
  * @param <T> the type of items produced
  */
-final class SourceProducerAdapter<T> extends AbstractProducer<T> {
+final class SourceProducerAdapter<T> implements Producer<T> {
 
 	private static final Logger log = LoggerFactory.getLogger(SourceProducerAdapter.class);
 
@@ -23,7 +23,7 @@ final class SourceProducerAdapter<T> extends AbstractProducer<T> {
 
 
 	@Override
-	protected void produceInternal(Sink<T> sink) throws Throwable {
+	public void produce(Sink<T> sink) throws Throwable {
 		try (this.source) {
 			while (this.source.receiveNext()) {
 				sink.send(this.source.next());

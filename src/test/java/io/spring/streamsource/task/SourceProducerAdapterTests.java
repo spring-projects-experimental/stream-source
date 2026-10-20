@@ -18,7 +18,7 @@ public class SourceProducerAdapterTests {
 		TestSource<String> source = TestSource.withItems("item 1", "item2");
 		TestSink<String> sink = TestSink.create();
 		SourceProducerAdapter<String> adapter = new SourceProducerAdapter<>(source);
-		adapter.produce(sink);
+		adapter.produceAndComplete(sink);
 
 		assertThat(sink.getSentItems()).containsExactly("item 1", "item2");
 		assertThat(sink.getCompletionException()).isNull();
@@ -30,7 +30,7 @@ public class SourceProducerAdapterTests {
 		Source<String> source = TestSource.withItems("item 1", "item2").failure(ex);
 		TestSink<String> sink = TestSink.create();
 		SourceProducerAdapter<String> adapter = new SourceProducerAdapter<>(source);
-		adapter.produce(sink);
+		adapter.produceAndComplete(sink);
 
 		assertThat(sink.getSentItems()).containsExactly("item 1", "item2");
 		assertThat(sink.getCompletionException()).isSameAs(ex);

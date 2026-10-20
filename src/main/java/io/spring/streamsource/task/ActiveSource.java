@@ -222,7 +222,7 @@ public final class ActiveSource<T> {
 		public void run() {
 			if (claimStart()) {
 				try {
-					this.producer.produce(this.exchange);
+					this.producer.produceAndComplete(this.exchange);
 				}
 				finally {
 					this.completionLatch.countDown();

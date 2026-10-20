@@ -11,7 +11,7 @@ import io.spring.streamsource.Sink;
  * A {@link Producer} for testing that emits a fixed set of items possibly
  * followed by an exception.
  */
-public class TestProducer<T> extends AbstractProducer<T> {
+public class TestProducer<T> implements Producer<T> {
 
 	private final List<Object> items = new ArrayList<>();
 
@@ -55,7 +55,7 @@ public class TestProducer<T> extends AbstractProducer<T> {
 
 	@SuppressWarnings("unchecked")
 	@Override
-	protected void produceInternal(Sink<T> sink) throws Throwable {
+	public void produce(Sink<T> sink) throws Throwable {
 		initIterator();
 		while (this.iterator.hasNext()) {
 			Object next = this.iterator.next();
