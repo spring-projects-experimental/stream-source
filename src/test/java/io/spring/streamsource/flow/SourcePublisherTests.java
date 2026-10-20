@@ -7,6 +7,7 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Flow.Publisher;
@@ -79,6 +80,21 @@ public class SourcePublisherTests {
 	}
 
 	@Test
+	public void interruptWhileAwaitingDemandSignalsInterruptedException() {
+		ListSource<String> source = new ListSource<>("a");
+		ThreadPerTaskExecutor executor = new ThreadPerTaskExecutor();
+		StepVerifier.create(JdkFlowAdapter.flowPublisherToFlux(FlowSourceAdapter.toPublisher(source, executor)), 0)
+				.then(() -> awaitWaiting(executor))
+				.then(() -> executor.thread.interrupt())
+				.expectError(InterruptedException.class)
+				.verify(Duration.ofSeconds(5));
+		assertThat(source.receives).hasValue(0);
+		await(executor.finished);
+		// Not an interrupt from cancel(), so it is left for the executor to see
+		assertThat(executor.interruptedAfterRun).isTrue();
+	}
+
+	@Test
 	public void secondSubscriberIsRejected() {
 		Publisher<String> publisher = FlowSourceAdapter.toPublisher(new ListSource<>("a"));
 		StepVerifier.create(JdkFlowAdapter.flowPublisherToFlux(publisher)).expectNext("a").verifyComplete();
@@ -147,6 +163,42 @@ public class SourcePublisherTests {
 			throw new IllegalStateException(ex);
 		}
 	}
+
+	private static void awaitWaiting(ThreadPerTaskExecutor executor) {
+		await(executor.started);
+		long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+		while (executor.thread.getState() != Thread.State.WAITING) {
+			assertThat(System.nanoTime()).isLessThan(deadline);
+			Thread.onSpinWait();
+		}
+	}
+
+
+	/**
+	 * Executor that runs a single task on a new platform thread.
+	 */
+	private static final class ThreadPerTaskExecutor implements Executor {
+
+		private volatile Thread thread;
+
+		private final CountDownLatch started = new CountDownLatch(1);
+
+		private final CountDownLatch finished = new CountDownLatch(1);
+
+		private final AtomicBoolean interruptedAfterRun = new AtomicBoolean();
+
+		@Override
+		public void execute(Runnable task) {
+			this.thread = new Thread(() -> {
+				task.run();
+				this.interruptedAfterRun.set(Thread.currentThread().isInterrupted());
+				this.finished.countDown();
+			});
+			this.thread.start();
+			this.started.countDown();
+		}
+	}
+
 
 	private static final class ListSource<T> extends AbstractSource<T> {
 

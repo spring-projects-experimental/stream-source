@@ -227,9 +227,15 @@ final class SourcePublisher<T> implements Publisher<T> {
 		 * this parks is not lost, so a {@code request(n)} racing with the check below
 		 * still wakes it.
 		 */
-		private boolean awaitDemand() {
+		private boolean awaitDemand() throws InterruptedException {
 			while (!this.cancelled && this.requested.get() == 0) {
 				LockSupport.park();
+				// An interrupt from cancel() ends the loop through the cancelled check;
+				// any other, like an executor shutting down, would otherwise make every
+				// park() return at once and spin until demand arrives
+				if (Thread.interrupted() && !this.cancelled) {
+					throw new InterruptedException();
+				}
 			}
 			return !this.cancelled;
 		}
