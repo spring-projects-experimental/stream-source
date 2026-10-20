@@ -11,9 +11,12 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Flow.Publisher;
+import java.util.concurrent.Flow.Subscriber;
+import java.util.concurrent.Flow.Subscription;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import io.spring.streamsource.AbstractSource;
 import io.spring.streamsource.Source;
@@ -77,6 +80,51 @@ public class SourcePublisherTests {
 		// proof the interrupt reached the blocked receive, not just that it eventually
 		// returned some other way
 		assertThat(source.interrupted.await(5, TimeUnit.SECONDS)).isTrue();
+	}
+
+	@Test
+	public void cancelLeavesNoInterruptBehind() throws InterruptedException {
+		BlockingSource source = new BlockingSource();
+		ThreadPerTaskExecutor executor = new ThreadPerTaskExecutor();
+		StepVerifier.create(JdkFlowAdapter.flowPublisherToFlux(FlowSourceAdapter.toPublisher(source, executor)))
+				.then(() -> await(source.receiving))
+				.thenCancel()
+				.verify();
+		assertThat(executor.finished.await(5, TimeUnit.SECONDS)).isTrue();
+		assertThat(source.closedWhileInterrupted).isFalse();
+		assertThat(executor.interruptedAfterRun).isFalse();
+	}
+
+	@Test
+	public void cancelAfterCompletionDoesNotInterruptTheNextTask() throws InterruptedException {
+		ThreadPerTaskExecutor executor = new ThreadPerTaskExecutor();
+		CountDownLatch completed = new CountDownLatch(1);
+		AtomicReference<@Nullable Subscription> subscription = new AtomicReference<>();
+		FlowSourceAdapter.toPublisher(new ListSource<>("a"), executor).subscribe(new Subscriber<String>() {
+			@Override
+			public void onSubscribe(Subscription s) {
+				subscription.set(s);
+				s.request(Long.MAX_VALUE);
+			}
+			@Override
+			public void onNext(String item) {
+			}
+			@Override
+			public void onError(Throwable ex) {
+			}
+			@Override
+			public void onComplete() {
+				completed.countDown();
+			}
+		});
+		assertThat(completed.await(5, TimeUnit.SECONDS)).isTrue();
+		assertThat(executor.finished.await(5, TimeUnit.SECONDS)).isTrue();
+
+		// The thread has moved on to its next task by now; cancelling is still legal (§3.7)
+		subscription.get().cancel();
+		executor.nextTask.countDown();
+		executor.thread.join(5000);
+		assertThat(executor.nextTaskInterrupted).isFalse();
 	}
 
 	@Test
@@ -175,7 +223,8 @@ public class SourcePublisherTests {
 
 
 	/**
-	 * Executor that runs a single task on a new platform thread.
+	 * Executor that runs a single task on a new platform thread, then keeps that thread
+	 * busy with a stand-in for the next task the executor would run on it.
 	 */
 	private static final class ThreadPerTaskExecutor implements Executor {
 
@@ -185,7 +234,11 @@ public class SourcePublisherTests {
 
 		private final CountDownLatch finished = new CountDownLatch(1);
 
+		private final CountDownLatch nextTask = new CountDownLatch(1);
+
 		private final AtomicBoolean interruptedAfterRun = new AtomicBoolean();
+
+		private final AtomicBoolean nextTaskInterrupted = new AtomicBoolean();
 
 		@Override
 		public void execute(Runnable task) {
@@ -193,6 +246,12 @@ public class SourcePublisherTests {
 				task.run();
 				this.interruptedAfterRun.set(Thread.currentThread().isInterrupted());
 				this.finished.countDown();
+				try {
+					this.nextTask.await(5, TimeUnit.SECONDS);
+				}
+				catch (InterruptedException ex) {
+					this.nextTaskInterrupted.set(true);
+				}
 			});
 			this.thread.start();
 			this.started.countDown();
@@ -249,6 +308,8 @@ public class SourcePublisherTests {
 
 		private final CountDownLatch interrupted = new CountDownLatch(1);
 
+		private final AtomicBoolean closedWhileInterrupted = new AtomicBoolean();
+
 		@Override
 		protected @Nullable String receiveItem() throws InterruptedException {
 			this.receiving.countDown();
@@ -260,6 +321,11 @@ public class SourcePublisherTests {
 				throw ex;
 			}
 			return null;
+		}
+
+		@Override
+		protected void handleClose(@Nullable Throwable cause) {
+			this.closedWhileInterrupted.set(Thread.currentThread().isInterrupted());
 		}
 	}
 

@@ -7,6 +7,7 @@ import java.util.concurrent.Flow.Subscriber;
 import java.util.concurrent.Flow.Subscription;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.LockSupport;
@@ -95,6 +96,14 @@ final class SourcePublisher<T> implements Publisher<T> {
 
 		private static final Logger logger = LoggerFactory.getLogger(SourcePublisher.class);
 
+		private static final int INTERRUPTIBLE = 0;
+
+		private static final int INTERRUPTING = 1;
+
+		private static final int INTERRUPTED = 2;
+
+		private static final int DETACHED = 3;
+
 		private final Source<T> source;
 
 		private final Subscriber<? super T> actual;
@@ -107,6 +116,9 @@ final class SourcePublisher<T> implements Publisher<T> {
 
 		/** Set by {@link #run()} itself, so the signal side has something to wake or interrupt. */
 		private volatile @Nullable Thread loopThread;
+
+		/** Whether {@link #cancel()} may still interrupt the loop thread, is doing so, or did. */
+		private final AtomicInteger interruptState = new AtomicInteger(INTERRUPTIBLE);
 
 		private volatile boolean cancelled;
 
@@ -153,9 +165,15 @@ final class SourcePublisher<T> implements Publisher<T> {
 			}
 			this.cancelled = true;
 			Thread thread = this.loopThread;
-			if (thread != null) {
-				// Also unblocks a parked awaitDemand(), same as unpark() would
-				thread.interrupt();
+			// Once run() has detached, the thread may be running another task already
+			if (thread != null && this.interruptState.compareAndSet(INTERRUPTIBLE, INTERRUPTING)) {
+				try {
+					// Also unblocks a parked awaitDemand(), same as unpark() would
+					thread.interrupt();
+				}
+				finally {
+					this.interruptState.set(INTERRUPTED);
+				}
 			}
 		}
 
@@ -217,8 +235,22 @@ final class SourcePublisher<T> implements Publisher<T> {
 				error(ex);
 			}
 			finally {
+				detach();
 				this.source.close();
 			}
+		}
+
+		private void detach() {
+			if (this.interruptState.compareAndSet(INTERRUPTIBLE, DETACHED)) {
+				return;
+			}
+			// cancel() got there first: wait for its interrupt to land, so that it cannot
+			// hit whatever the executor runs next on this thread, then clear it, so that
+			// neither close() nor that next task sees it
+			while (this.interruptState.get() == INTERRUPTING) {
+				Thread.yield();
+			}
+			Thread.interrupted();
 		}
 
 		/**
