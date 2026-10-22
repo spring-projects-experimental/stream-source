@@ -23,6 +23,7 @@ import io.spring.streamsource.Source;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 import reactor.adapter.JdkFlowAdapter;
+import reactor.core.Disposable;
 import reactor.test.StepVerifier;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -80,6 +81,59 @@ public class SourcePublisherTests {
 		// proof the interrupt reached the blocked receive, not just that it eventually
 		// returned some other way
 		assertThat(source.interrupted.await(5, TimeUnit.SECONDS)).isTrue();
+	}
+
+	@Test
+	public void cancelWhileAwaitingDemandClosesSourceWithoutInterrupt() {
+		ListSource<String> source = new ListSource<>("a");
+		ThreadPerTaskExecutor executor = new ThreadPerTaskExecutor();
+		StepVerifier.create(JdkFlowAdapter.flowPublisherToFlux(FlowSourceAdapter.toPublisher(source, executor)), 0)
+				.then(() -> awaitWaiting(executor))
+				.thenCancel()
+				.verify();
+		await(source.closed);
+		await(executor.finished);
+		assertThat(source.receives).hasValue(0);
+		assertThat(source.closedWhileInterrupted).isFalse();
+		assertThat(executor.interruptedAfterRun).isFalse();
+	}
+
+	@Test
+	public void cancelFromOnNextDoesNotInterruptTheSubscriber() {
+		AtomicBoolean interrupted = new AtomicBoolean();
+		// next() cancels upstream from onNext, before passing the item on
+		StepVerifier.create(JdkFlowAdapter.flowPublisherToFlux(FlowSourceAdapter.toPublisher(new ListSource<>("a", "b")))
+						.next()
+						.doOnNext(item -> interrupted.set(Thread.currentThread().isInterrupted())))
+				.expectNext("a")
+				.verifyComplete();
+		assertThat(interrupted).isFalse();
+	}
+
+	@Test
+	public void cancelFromAnotherThreadDoesNotInterruptOnNext() {
+		CountDownLatch inOnNext = new CountDownLatch(1);
+		CountDownLatch cancelled = new CountDownLatch(1);
+		CountDownLatch done = new CountDownLatch(1);
+		AtomicBoolean interrupted = new AtomicBoolean();
+		Disposable disposable = JdkFlowAdapter.flowPublisherToFlux(FlowSourceAdapter.toPublisher(new ListSource<>("a", "b")))
+				.doOnNext(item -> {
+					inOnNext.countDown();
+					try {
+						cancelled.await(5, TimeUnit.SECONDS);
+					}
+					catch (InterruptedException ex) {
+						interrupted.set(true);
+					}
+					interrupted.compareAndSet(false, Thread.currentThread().isInterrupted());
+					done.countDown();
+				})
+				.subscribe();
+		await(inOnNext);
+		disposable.dispose();
+		cancelled.countDown();
+		await(done);
+		assertThat(interrupted).isFalse();
 	}
 
 	@Test
@@ -267,6 +321,8 @@ public class SourcePublisherTests {
 
 		private final CountDownLatch closed = new CountDownLatch(1);
 
+		private final AtomicBoolean closedWhileInterrupted = new AtomicBoolean();
+
 		@SafeVarargs
 		ListSource(T... items) {
 			this.iterator = Arrays.asList(items).iterator();
@@ -280,6 +336,7 @@ public class SourcePublisherTests {
 
 		@Override
 		protected void handleClose(@Nullable Throwable cause) {
+			this.closedWhileInterrupted.set(Thread.currentThread().isInterrupted());
 			this.closed.countDown();
 		}
 	}

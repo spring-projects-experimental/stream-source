@@ -42,9 +42,8 @@ public abstract class FlowSourceAdapter {
 	 * signalled by the {@code request(n)} that follows the last item: a subscriber that
 	 * stops requesting after exactly as many items as the Source had does not see
 	 * {@code onComplete} until it asks again.
-	 * <p>Cancelling interrupts the receive loop rather than closing the Source directly,
-	 * which is what unblocks a receive that is already in progress; the loop then closes
-	 * the Source itself, so cancelling never blocks the calling thread.
+	 * <p>Cancelling never blocks the calling thread: a receive in progress is interrupted,
+	 * and the receive loop then closes the Source.
 	 * <p>Requires Java 21+, use {@link #toPublisher(Source, Executor)} on Java &lt; 21.
 	 * @param source the source to receive from
 	 * @return a Publisher that emits the items of the Source

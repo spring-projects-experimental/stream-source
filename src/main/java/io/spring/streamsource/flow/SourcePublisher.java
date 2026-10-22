@@ -1,5 +1,6 @@
 package io.spring.streamsource.flow;
 
+import java.io.IOException;
 import java.util.Objects;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Flow.Publisher;
@@ -96,13 +97,13 @@ final class SourcePublisher<T> implements Publisher<T> {
 
 		private static final Logger logger = LoggerFactory.getLogger(SourcePublisher.class);
 
-		private static final int INTERRUPTIBLE = 0;
+		private static final int IDLE = 0;
 
-		private static final int INTERRUPTING = 1;
+		private static final int RECEIVING = 1;
 
-		private static final int INTERRUPTED = 2;
+		private static final int INTERRUPTING = 2;
 
-		private static final int DETACHED = 3;
+		private static final int INTERRUPTED = 3;
 
 		private final Source<T> source;
 
@@ -117,8 +118,8 @@ final class SourcePublisher<T> implements Publisher<T> {
 		/** Set by {@link #run()} itself, so the signal side has something to wake or interrupt. */
 		private volatile @Nullable Thread loopThread;
 
-		/** Whether {@link #cancel()} may still interrupt the loop thread, is doing so, or did. */
-		private final AtomicInteger interruptState = new AtomicInteger(INTERRUPTIBLE);
+		/** Whether the loop is inside {@link Source#receiveNext()}, the only place {@link #cancel()} interrupts. */
+		private final AtomicInteger phase = new AtomicInteger(IDLE);
 
 		private volatile boolean cancelled;
 
@@ -152,11 +153,8 @@ final class SourcePublisher<T> implements Publisher<T> {
 
 		/**
 		 * {@inheritDoc}
-		 * <p>Interrupts the loop thread instead of closing the Source directly, so this
-		 * never blocks the calling thread. The interrupt unblocks a receive already in
-		 * progress the same way an unpark unblocks a parked wait for demand; the loop
-		 * thread closes the Source itself, from {@link #run()}, since only that thread
-		 * may block.
+		 * <p>Never blocks the calling thread. A receive in progress is interrupted, and
+		 * the loop thread then closes the Source.
 		 */
 		@Override
 		public void cancel() {
@@ -164,16 +162,24 @@ final class SourcePublisher<T> implements Publisher<T> {
 				return;
 			}
 			this.cancelled = true;
+			// Closing here would block the caller, which may be an event loop, and use the
+			// Source from a second thread; the loop thread closes it in run() instead
 			Thread thread = this.loopThread;
-			// Once run() has detached, the thread may be running another task already
-			if (thread != null && this.interruptState.compareAndSet(INTERRUPTIBLE, INTERRUPTING)) {
+			if (thread == null) {
+				return;
+			}
+			// Only a receive needs interrupting: a parked awaitDemand() needs an unpark,
+			// and the subscriber's own code is followed by a check of cancelled anyway
+			if (this.phase.compareAndSet(RECEIVING, INTERRUPTING)) {
 				try {
-					// Also unblocks a parked awaitDemand(), same as unpark() would
 					thread.interrupt();
 				}
 				finally {
-					this.interruptState.set(INTERRUPTED);
+					this.phase.set(INTERRUPTED);
 				}
+			}
+			else if (thread != Thread.currentThread()) {
+				LockSupport.unpark(thread);
 			}
 		}
 
@@ -213,7 +219,7 @@ final class SourcePublisher<T> implements Publisher<T> {
 			this.loopThread = Thread.currentThread();
 			try {
 				while (awaitDemand()) {
-					if (!this.source.receiveNext()) {
+					if (!receiveNext()) {
 						complete();
 						return;
 					}
@@ -228,29 +234,38 @@ final class SourcePublisher<T> implements Publisher<T> {
 				signalPendingError();
 			}
 			catch (InterruptedException ex) {
-				Thread.currentThread().interrupt();
+				// An interrupt from cancel() was cleared on the way out of receiveNext()
+				if (!this.cancelled) {
+					Thread.currentThread().interrupt();
+				}
 				error(ex);
 			}
 			catch (Throwable ex) {
 				error(ex);
 			}
 			finally {
-				detach();
 				this.source.close();
 			}
 		}
 
-		private void detach() {
-			if (this.interruptState.compareAndSet(INTERRUPTIBLE, DETACHED)) {
-				return;
+		private boolean receiveNext() throws IOException, InterruptedException {
+			this.phase.set(RECEIVING);
+			try {
+				// Checked after publishing the phase: a cancel() that saw IDLE did not interrupt
+				return (!this.cancelled && this.source.receiveNext());
 			}
-			// cancel() got there first: wait for its interrupt to land, so that it cannot
-			// hit whatever the executor runs next on this thread, then clear it, so that
-			// neither close() nor that next task sees it
-			while (this.interruptState.get() == INTERRUPTING) {
-				Thread.yield();
+			finally {
+				if (!this.phase.compareAndSet(RECEIVING, IDLE)) {
+					// cancel() got there first: wait for its interrupt to land, then clear
+					// it, so that it cannot reach the subscriber, close(), or whatever the
+					// executor runs next on this thread
+					while (this.phase.get() == INTERRUPTING) {
+						Thread.yield();
+					}
+					Thread.interrupted();
+					this.phase.set(IDLE);
+				}
 			}
-			Thread.interrupted();
 		}
 
 		/**
@@ -262,10 +277,9 @@ final class SourcePublisher<T> implements Publisher<T> {
 		private boolean awaitDemand() throws InterruptedException {
 			while (!this.cancelled && this.requested.get() == 0) {
 				LockSupport.park();
-				// An interrupt from cancel() ends the loop through the cancelled check;
-				// any other, like an executor shutting down, would otherwise make every
-				// park() return at once and spin until demand arrives
-				if (Thread.interrupted() && !this.cancelled) {
+				// Not from cancel(), which only unparks here; an executor shutting down,
+				// say, would otherwise make every park() return at once and spin
+				if (Thread.interrupted()) {
 					throw new InterruptedException();
 				}
 			}
