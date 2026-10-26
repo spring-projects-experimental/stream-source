@@ -23,6 +23,7 @@ It is `AutoCloseable` to release underlying resources such as a connection.
 
 - `receiveNext()` does the actual work to receive the next item. 
    It blocks until a complete item is available, and can throw `IOException` or `InterruptedException`.
+- A blocked receive is cancelled by interrupting the receiving thread, see [CANCELLATION.md](CANCELLATION.md).
 - `next()` simply provides access to the received item.
    It is guaranteed to return a value after `receiveNext()` returns `true`.
 - The stream ends when `receiveNext()` returns `false` or the consumer calls `close()`.
