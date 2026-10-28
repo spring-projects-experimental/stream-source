@@ -102,8 +102,8 @@ public class PublisherSourceBlockHoundTests {
 		}
 
 		void pumpUntil(CountDownLatch stop) {
-			// A blocking await() here would itself trip BlockHound, since this runs
-			// entirely on the simulated non-blocking thread; spin instead.
+			// Spin until subscribed, since await() would trip BlockHound on this thread.
+			// Checking stop as well ends the spin if the test fails before subscribing.
 			while (this.subscribed.getCount() > 0 && stop.getCount() > 0) {
 				// busy-wait for subscribe()
 			}
