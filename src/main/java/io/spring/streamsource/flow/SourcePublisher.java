@@ -61,18 +61,18 @@ final class SourcePublisher<T> implements Publisher<T> {
 			return;
 		}
 		ReceiveLoop<T> loop = new ReceiveLoop<>(this.source, subscriber);
-		subscriber.onSubscribe(loop);
+		try {
+			subscriber.onSubscribe(loop);
+		}
+		catch (Throwable ex) {
+			// §2.13: the subscription is cancelled, and no loop thread will close the Source
+			closeSource();
+			throw ex;
+		}
 		if (loop.isCancelled()) {
-			// Cancelled from onSubscribe: no loop thread will ever run, so nothing
-			// will reach the finally in run() that closes the Source; hand that off
-			// to the executor instead of closing here, on what may be an NIO thread.
+			// Cancelled from onSubscribe: no loop thread will close the Source either
 			loop.signalPendingError();
-			try {
-				this.executor.execute(this.source::close);
-			}
-			catch (RejectedExecutionException ex) {
-				this.source.close();
-			}
+			closeSource();
 			return;
 		}
 		try {
@@ -80,6 +80,18 @@ final class SourcePublisher<T> implements Publisher<T> {
 		}
 		catch (RejectedExecutionException ex) {
 			loop.rejected(ex);
+		}
+	}
+
+	/**
+	 * Close the Source on the executor, since the subscribing thread may be an NIO thread.
+	 */
+	private void closeSource() {
+		try {
+			this.executor.execute(this.source::close);
+		}
+		catch (RejectedExecutionException ex) {
+			this.source.close();
 		}
 	}
 
@@ -148,7 +160,7 @@ final class SourcePublisher<T> implements Publisher<T> {
 				long sum = r + n;
 				return (sum < 0 ? Long.MAX_VALUE : sum);
 			});
-			unpark();
+			unpark(this.loopThread);
 		}
 
 		/**
@@ -178,14 +190,17 @@ final class SourcePublisher<T> implements Publisher<T> {
 					this.phase.set(INTERRUPTED);
 				}
 			}
-			else if (thread != Thread.currentThread()) {
-				LockSupport.unpark(thread);
+			else {
+				unpark(thread);
 			}
 		}
 
-		private void unpark() {
-			Thread thread = this.loopThread;
-			if (thread != null) {
+		/**
+		 * Unpark the loop thread, unless called on it: it checks for demand and
+		 * cancellation before it parks.
+		 */
+		private static void unpark(@Nullable Thread thread) {
+			if (thread != null && thread != Thread.currentThread()) {
 				LockSupport.unpark(thread);
 			}
 		}
@@ -217,6 +232,7 @@ final class SourcePublisher<T> implements Publisher<T> {
 		@Override
 		public void run() {
 			this.loopThread = Thread.currentThread();
+			boolean interrupted = false;
 			try {
 				while (awaitDemand()) {
 					if (!receiveNext()) {
@@ -234,17 +250,21 @@ final class SourcePublisher<T> implements Publisher<T> {
 				signalPendingError();
 			}
 			catch (InterruptedException ex) {
-				// An interrupt from cancel() was cleared on the way out of receiveNext()
-				if (!this.cancelled) {
-					Thread.currentThread().interrupt();
-				}
+				// An interrupt from cancel() was cleared in receiveNext(); any other is
+				// restored after close()
+				interrupted = !this.cancelled;
 				error(ex);
 			}
 			catch (Throwable ex) {
 				error(ex);
 			}
 			finally {
+				// The thread may run other tasks from here on
+				this.loopThread = null;
 				this.source.close();
+				if (interrupted) {
+					Thread.currentThread().interrupt();
+				}
 			}
 		}
 

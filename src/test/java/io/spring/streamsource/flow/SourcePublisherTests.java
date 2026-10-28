@@ -17,6 +17,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.LockSupport;
 
 import io.spring.streamsource.AbstractSource;
 import io.spring.streamsource.Source;
@@ -27,6 +28,7 @@ import reactor.core.Disposable;
 import reactor.test.StepVerifier;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Unit tests for {@link SourcePublisher}, created through
@@ -150,7 +152,7 @@ public class SourcePublisherTests {
 	}
 
 	@Test
-	public void cancelAfterCompletionDoesNotInterruptTheNextTask() throws InterruptedException {
+	public void cancelAfterCompletionDoesNotReachTheNextTask() throws InterruptedException {
 		ThreadPerTaskExecutor executor = new ThreadPerTaskExecutor();
 		CountDownLatch completed = new CountDownLatch(1);
 		AtomicReference<@Nullable Subscription> subscription = new AtomicReference<>();
@@ -179,21 +181,77 @@ public class SourcePublisherTests {
 		executor.nextTask.countDown();
 		executor.thread.join(5000);
 		assertThat(executor.nextTaskInterrupted).isFalse();
+		assertThat(executor.nextTaskUnparked).isFalse();
+	}
+
+	@Test
+	public void requestFromOnNextDoesNotReachTheNextTask() throws InterruptedException {
+		ThreadPerTaskExecutor executor = new ThreadPerTaskExecutor();
+		FlowSourceAdapter.toPublisher(new ListSource<>("a", "b"), executor).subscribe(new Subscriber<String>() {
+			private @Nullable Subscription subscription;
+			@Override
+			public void onSubscribe(Subscription s) {
+				this.subscription = s;
+				s.request(1);
+			}
+			@Override
+			public void onNext(String item) {
+				this.subscription.request(1);
+			}
+			@Override
+			public void onError(Throwable ex) {
+			}
+			@Override
+			public void onComplete() {
+			}
+		});
+		assertThat(executor.finished.await(5, TimeUnit.SECONDS)).isTrue();
+		executor.nextTask.countDown();
+		executor.thread.join(5000);
+		assertThat(executor.nextTaskUnparked).isFalse();
 	}
 
 	@Test
 	public void interruptWhileAwaitingDemandSignalsInterruptedException() {
 		ListSource<String> source = new ListSource<>("a");
 		ThreadPerTaskExecutor executor = new ThreadPerTaskExecutor();
-		StepVerifier.create(JdkFlowAdapter.flowPublisherToFlux(FlowSourceAdapter.toPublisher(source, executor)), 0)
+		AtomicBoolean errorWhileInterrupted = new AtomicBoolean();
+		StepVerifier.create(JdkFlowAdapter.flowPublisherToFlux(FlowSourceAdapter.toPublisher(source, executor))
+						.doOnError(ex -> errorWhileInterrupted.set(Thread.currentThread().isInterrupted())), 0)
 				.then(() -> awaitWaiting(executor))
 				.then(() -> executor.thread.interrupt())
 				.expectError(InterruptedException.class)
 				.verify(Duration.ofSeconds(5));
 		assertThat(source.receives).hasValue(0);
 		await(executor.finished);
+		assertThat(errorWhileInterrupted).isFalse();
+		assertThat(source.closedWhileInterrupted).isFalse();
 		// Not an interrupt from cancel(), so it is left for the executor to see
 		assertThat(executor.interruptedAfterRun).isTrue();
+	}
+
+	@Test
+	public void onSubscribeFailureClosesSource() {
+		ListSource<String> source = new ListSource<>("a");
+		IllegalStateException ex = new IllegalStateException("boom");
+		Publisher<String> publisher = FlowSourceAdapter.toPublisher(source, Runnable::run);
+		assertThatThrownBy(() -> publisher.subscribe(new Subscriber<String>() {
+			@Override
+			public void onSubscribe(Subscription s) {
+				throw ex;
+			}
+			@Override
+			public void onNext(String item) {
+			}
+			@Override
+			public void onError(Throwable ex) {
+			}
+			@Override
+			public void onComplete() {
+			}
+		})).isSameAs(ex);
+		assertThat(source.closed.getCount()).isZero();
+		assertThat(source.receives).hasValue(0);
 	}
 
 	@Test
@@ -278,7 +336,8 @@ public class SourcePublisherTests {
 
 	/**
 	 * Executor that runs a single task on a new platform thread, then keeps that thread
-	 * busy with a stand-in for the next task the executor would run on it.
+	 * busy with a stand-in for the next task the executor would run on it. Once
+	 * released, the stand-in parks briefly to detect an {@code unpark} left behind.
 	 */
 	private static final class ThreadPerTaskExecutor implements Executor {
 
@@ -294,18 +353,29 @@ public class SourcePublisherTests {
 
 		private final AtomicBoolean nextTaskInterrupted = new AtomicBoolean();
 
+		private final AtomicBoolean nextTaskUnparked = new AtomicBoolean();
+
 		@Override
 		public void execute(Runnable task) {
 			this.thread = new Thread(() -> {
 				task.run();
 				this.interruptedAfterRun.set(Thread.currentThread().isInterrupted());
 				this.finished.countDown();
+				// Awaiting a latch would consume a pending unpark
+				long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
 				try {
-					this.nextTask.await(5, TimeUnit.SECONDS);
+					while (this.nextTask.getCount() > 0 && System.nanoTime() < deadline) {
+						Thread.sleep(1);
+					}
 				}
 				catch (InterruptedException ex) {
 					this.nextTaskInterrupted.set(true);
+					return;
 				}
+				long parkNanos = TimeUnit.MILLISECONDS.toNanos(200);
+				long start = System.nanoTime();
+				LockSupport.parkNanos(parkNanos);
+				this.nextTaskUnparked.set(System.nanoTime() - start < parkNanos / 2);
 			});
 			this.thread.start();
 			this.started.countDown();
