@@ -60,11 +60,8 @@ public abstract class AbstractSource<T> implements Source<T> {
 		}
 	}
 
-	private static void throwIfClosedWithError(Object closure) throws IOException, InterruptedException {
+	private static void throwIfClosedWithError(Object closure) throws IOException {
 		if (closure instanceof IOException ex) {
-			throw ex;
-		}
-		if (closure instanceof InterruptedException ex) {
 			throw ex;
 		}
 		if (closure instanceof RuntimeException ex) {
@@ -110,7 +107,9 @@ public abstract class AbstractSource<T> implements Source<T> {
 	}
 
 	private void closeInternal(@Nullable Throwable ex) {
-		if (!this.closure.compareAndSet(null, (ex != null ? ex : Boolean.TRUE))) {
+		// An interrupt concerns the receiving thread, not the Source, so it is thrown only once
+		Object closure = (ex != null && !(ex instanceof InterruptedException) ? ex : Boolean.TRUE);
+		if (!this.closure.compareAndSet(null, closure)) {
 			return;
 		}
 

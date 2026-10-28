@@ -280,6 +280,7 @@ public class BlockingQueueExchangeTests {
 			Thread.currentThread().interrupt();
 
 			assertThatExceptionOfType(InterruptedException.class).isThrownBy(source::receiveNext);
+			assertThat(source.receiveNext()).as("should not rethrow the interrupt").isFalse();
 		}
 	}
 

@@ -73,11 +73,12 @@ class AbstractSourceTests {
 	}
 
 	@Test
-	void receiveToInterruptedException() {
+	void receiveToInterruptedException() throws IOException, InterruptedException {
 		InterruptedException ex = new InterruptedException("simulated interrupt");
 		Source<String> source = TestSource.withFailure(ex);
 
 		assertThatThrownBy(source::receiveNext).isSameAs(ex);
+		assertThat(source.receiveNext()).as("should not rethrow the interrupt").isFalse();
 	}
 
 	@Test
