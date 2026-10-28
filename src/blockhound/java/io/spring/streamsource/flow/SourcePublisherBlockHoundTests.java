@@ -1,5 +1,7 @@
 package io.spring.streamsource.flow;
 
+import java.io.IOException;
+import java.nio.channels.spi.AbstractInterruptibleChannel;
 import java.util.Arrays;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
@@ -8,6 +10,7 @@ import java.util.concurrent.Flow.Subscriber;
 import java.util.concurrent.Flow.Subscription;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.LockSupport;
 
 import io.spring.streamsource.AbstractSource;
 import org.jspecify.annotations.Nullable;
@@ -46,6 +49,23 @@ public class SourcePublisherBlockHoundTests {
 				.doesNotThrowAnyException();
 
 		// The loop thread closes the Source asynchronously
+		assertThat(source.closed.await(5, TimeUnit.SECONDS)).isTrue();
+	}
+
+	@Test
+	void cancelDoesNotBlockOnEventLoopWhenTheSourceReadsAChannel() throws InterruptedException {
+		ChannelSource source = new ChannelSource();
+		Subscription subscription = subscribe(
+				FlowSourceAdapter.toPublisher(source, Executors.newCachedThreadPool()));
+		subscription.request(1);
+		assertThat(source.receiving.await(5, TimeUnit.SECONDS)).isTrue();
+
+		// Interrupting a thread blocked on a channel closes the channel on the interrupting thread
+		assertThatCode(() -> Mono.fromRunnable(subscription::cancel)
+				.subscribeOn(Schedulers.parallel())
+				.block())
+				.doesNotThrowAnyException();
+
 		assertThat(source.closed.await(5, TimeUnit.SECONDS)).isTrue();
 	}
 
@@ -134,6 +154,57 @@ public class SourcePublisherBlockHoundTests {
 				Thread.currentThread().interrupt();
 			}
 			this.closed.countDown();
+		}
+	}
+
+
+	/**
+	 * Source whose receive blocks in an {@link AbstractInterruptibleChannel} until
+	 * interrupted, and whose channel is slow to close.
+	 */
+	private static final class ChannelSource extends AbstractSource<String> {
+
+		final CountDownLatch receiving = new CountDownLatch(1);
+
+		final CountDownLatch closed = new CountDownLatch(1);
+
+		private final SlowCloseChannel channel = new SlowCloseChannel();
+
+		@Override
+		protected @Nullable String receiveItem() throws IOException {
+			this.channel.read();
+			return null;
+		}
+
+		@Override
+		protected void handleClose(@Nullable Throwable cause) {
+			this.closed.countDown();
+		}
+
+		private final class SlowCloseChannel extends AbstractInterruptibleChannel {
+
+			void read() throws IOException {
+				begin();
+				try {
+					receiving.countDown();
+					while (isOpen()) {
+						LockSupport.park(this);
+					}
+				}
+				finally {
+					end(false);
+				}
+			}
+
+			@Override
+			protected void implCloseChannel() {
+				try {
+					Thread.sleep(10);
+				}
+				catch (InterruptedException ex) {
+					Thread.currentThread().interrupt();
+				}
+			}
 		}
 	}
 

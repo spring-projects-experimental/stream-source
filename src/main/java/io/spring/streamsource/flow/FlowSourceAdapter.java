@@ -42,8 +42,8 @@ public abstract class FlowSourceAdapter {
 	 * signalled by the {@code request(n)} that follows the last item: a subscriber that
 	 * stops requesting after exactly as many items as the Source had does not see
 	 * {@code onComplete} until it asks again.
-	 * <p>Cancelling never blocks the calling thread: a receive in progress is interrupted,
-	 * and the receive loop then closes the Source. If the Source does not respond to
+	 * <p>Cancelling never blocks the calling thread: a receive in progress is interrupted
+	 * from a task on the executor, and the receive loop then closes the Source. If the Source does not respond to
 	 * interruption, the receive continues until it returns, and the item it returns, if
 	 * any, is discarded. See {@link Thread#interrupt()} for the blocking operations that
 	 * respond to interruption.
@@ -67,6 +67,8 @@ public abstract class FlowSourceAdapter {
 	 * The receive loop blocks, and parks while there is no demand, so this must be an
 	 * executor where blocking is allowed, compatible with Java &lt; 21. The caller
 	 * remains responsible for its lifecycle.
+	 * <p>Cancelling interrupts a receive in progress from a task on this executor. If the
+	 * executor has no free thread, the interrupt waits for one.
 	 * @param source the source to receive from
 	 * @param executor the executor that runs the receive loop
 	 * @return a Publisher that emits the items of the Source

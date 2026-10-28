@@ -13,6 +13,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Flow.Publisher;
 import java.util.concurrent.Flow.Subscriber;
 import java.util.concurrent.Flow.Subscription;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -136,6 +137,25 @@ public class SourcePublisherTests {
 		cancelled.countDown();
 		await(done);
 		assertThat(interrupted).isFalse();
+	}
+
+	@Test
+	public void cancelWithTheInterruptRejectedLetsTheReceiveReturn() {
+		BlockingSource source = new BlockingSource();
+		AtomicBoolean loopStarted = new AtomicBoolean();
+		Executor executor = task -> {
+			if (!loopStarted.compareAndSet(false, true)) {
+				throw new RejectedExecutionException("shut down");
+			}
+			new Thread(task).start();
+		};
+		StepVerifier.create(JdkFlowAdapter.flowPublisherToFlux(FlowSourceAdapter.toPublisher(source, executor)))
+				.then(() -> await(source.receiving))
+				.thenCancel()
+				.verify();
+		source.released.countDown();
+		await(source.closed);
+		assertThat(source.interrupted.getCount()).isOne();
 	}
 
 	@Test
@@ -335,9 +355,10 @@ public class SourcePublisherTests {
 
 
 	/**
-	 * Executor that runs a single task on a new platform thread, then keeps that thread
+	 * Executor that runs its first task on a new platform thread, then keeps that thread
 	 * busy with a stand-in for the next task the executor would run on it. Once
 	 * released, the stand-in parks briefly to detect an {@code unpark} left behind.
+	 * Later tasks run on platform threads of their own.
 	 */
 	private static final class ThreadPerTaskExecutor implements Executor {
 
@@ -357,6 +378,10 @@ public class SourcePublisherTests {
 
 		@Override
 		public void execute(Runnable task) {
+			if (this.thread != null) {
+				new Thread(task).start();
+				return;
+			}
 			this.thread = new Thread(() -> {
 				task.run();
 				this.interruptedAfterRun.set(Thread.currentThread().isInterrupted());
@@ -425,23 +450,25 @@ public class SourcePublisherTests {
 
 
 	/**
-	 * Source whose receive blocks, interruptibly, until cancelled.
+	 * Source whose receive blocks, interruptibly, until cancelled or released.
 	 */
 	private static final class BlockingSource extends AbstractSource<String> {
 
 		private final CountDownLatch receiving = new CountDownLatch(1);
 
-		private final CountDownLatch neverCompletes = new CountDownLatch(1);
+		private final CountDownLatch released = new CountDownLatch(1);
 
 		private final CountDownLatch interrupted = new CountDownLatch(1);
 
 		private final AtomicBoolean closedWhileInterrupted = new AtomicBoolean();
 
+		private final CountDownLatch closed = new CountDownLatch(1);
+
 		@Override
 		protected @Nullable String receiveItem() throws InterruptedException {
 			this.receiving.countDown();
 			try {
-				this.neverCompletes.await();
+				this.released.await();
 			}
 			catch (InterruptedException ex) {
 				this.interrupted.countDown();
@@ -453,6 +480,7 @@ public class SourcePublisherTests {
 		@Override
 		protected void handleClose(@Nullable Throwable cause) {
 			this.closedWhileInterrupted.set(Thread.currentThread().isInterrupted());
+			this.closed.countDown();
 		}
 	}
 

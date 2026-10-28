@@ -60,7 +60,7 @@ final class SourcePublisher<T> implements Publisher<T> {
 					"A Source has a single consumer, so " + this + " allows a single subscriber"));
 			return;
 		}
-		ReceiveLoop<T> loop = new ReceiveLoop<>(this.source, subscriber);
+		ReceiveLoop<T> loop = new ReceiveLoop<>(this.source, this.executor, subscriber);
 		try {
 			subscriber.onSubscribe(loop);
 		}
@@ -119,6 +119,8 @@ final class SourcePublisher<T> implements Publisher<T> {
 
 		private final Source<T> source;
 
+		private final Executor executor;
+
 		private final Subscriber<? super T> actual;
 
 		/** Outstanding demand, {@code Long.MAX_VALUE} meaning unbounded. */
@@ -130,14 +132,15 @@ final class SourcePublisher<T> implements Publisher<T> {
 		/** Set by {@link #run()} itself, so the signal side has something to wake or interrupt. */
 		private volatile @Nullable Thread loopThread;
 
-		/** Whether the loop is inside {@link Source#receiveNext()}, the only place {@link #cancel()} interrupts. */
+		/** Whether the loop is inside {@link Source#receiveNext()}, the only place a cancel interrupts. */
 		private final AtomicInteger phase = new AtomicInteger(IDLE);
 
 		private volatile boolean cancelled;
 
 
-		ReceiveLoop(Source<T> source, Subscriber<? super T> actual) {
+		ReceiveLoop(Source<T> source, Executor executor, Subscriber<? super T> actual) {
 			this.source = source;
+			this.executor = executor;
 			this.actual = actual;
 		}
 
@@ -165,9 +168,11 @@ final class SourcePublisher<T> implements Publisher<T> {
 
 		/**
 		 * {@inheritDoc}
-		 * <p>Never blocks the calling thread. A receive in progress is interrupted, and
-		 * the loop thread then closes the Source. If the Source does not respond to
-		 * interruption, the receive continues until it returns, and its item is discarded.
+		 * <p>Never blocks the calling thread. A receive in progress is interrupted from a
+		 * task on the executor, and the loop thread then closes the Source. If the executor
+		 * has no free thread, the interrupt waits for one. If it rejects the task, or the
+		 * Source does not respond to interruption, the receive continues until it returns,
+		 * and its item is discarded.
 		 */
 		@Override
 		public void cancel() {
@@ -183,16 +188,30 @@ final class SourcePublisher<T> implements Publisher<T> {
 			}
 			// Only a receive needs interrupting: a parked awaitDemand() needs an unpark,
 			// and the subscriber's own code is followed by a check of cancelled anyway
-			if (this.phase.compareAndSet(RECEIVING, INTERRUPTING)) {
+			if (this.phase.get() == RECEIVING) {
+				// Interrupting a thread blocked on a channel closes the channel on the
+				// interrupting thread, so that is left to the executor
+				try {
+					this.executor.execute(this::interruptReceive);
+				}
+				catch (RejectedExecutionException ex) {
+					logger.debug("interrupt rejected by the executor, the receive continues until it returns");
+				}
+			}
+			else {
+				unpark(thread);
+			}
+		}
+
+		private void interruptReceive() {
+			Thread thread = this.loopThread;
+			if (thread != null && this.phase.compareAndSet(RECEIVING, INTERRUPTING)) {
 				try {
 					thread.interrupt();
 				}
 				finally {
 					this.phase.set(INTERRUPTED);
 				}
-			}
-			else {
-				unpark(thread);
 			}
 		}
 
@@ -277,9 +296,9 @@ final class SourcePublisher<T> implements Publisher<T> {
 			}
 			finally {
 				if (!this.phase.compareAndSet(RECEIVING, IDLE)) {
-					// cancel() got there first: wait for its interrupt to land, then clear
-					// it, so that it cannot reach the subscriber, close(), or whatever the
-					// executor runs next on this thread
+					// interruptReceive() got there first: wait for its interrupt to land,
+					// then clear it, so that it cannot reach the subscriber, close(), or
+					// whatever the executor runs next on this thread
 					while (this.phase.get() == INTERRUPTING) {
 						Thread.yield();
 					}
