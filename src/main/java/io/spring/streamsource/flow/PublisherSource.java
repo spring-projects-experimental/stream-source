@@ -8,12 +8,11 @@ import java.util.concurrent.Flow.Subscription;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
+import io.spring.streamsource.AbstractSource;
 import io.spring.streamsource.BlockingQueueExchange;
 import io.spring.streamsource.SinkCompleteException;
 import io.spring.streamsource.Source;
 import org.jspecify.annotations.Nullable;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * {@link Source} that subscribes to a Reactive Streams {@link Publisher} and buffers
@@ -31,10 +30,7 @@ import org.slf4j.LoggerFactory;
  *
  * @param <T> the type of items received through the Source
  */
-final class PublisherSource<T> implements Source<T> {
-
-	private static final Logger logger = LoggerFactory.getLogger(PublisherSource.class);
-
+final class PublisherSource<T> extends AbstractSource<T> {
 
 	private final Publisher<T> publisher;
 
@@ -46,8 +42,6 @@ final class PublisherSource<T> implements Source<T> {
 
 	private boolean subscribed;
 
-	private boolean closed;
-
 
 	PublisherSource(Publisher<T> publisher, int capacity) {
 		this.publisher = publisher;
@@ -57,38 +51,24 @@ final class PublisherSource<T> implements Source<T> {
 
 
 	@Override
-	public boolean receiveNext() throws IOException, InterruptedException {
+	protected @Nullable T receiveItem() throws IOException, InterruptedException {
 		if (!this.subscribed) {
-			if (this.closed) {
-				return false;
-			}
 			// Subscribe on the first receive, so that creating a Source starts nothing
 			logger.debug("subscribing to {}", this.publisher);
 			this.subscribed = true;
 			this.publisher.subscribe(this.subscriber);
 		}
-		try {
-			if (this.exchange.receiveNext()) {
-				// Give the publisher back the slot the item freed
-				this.subscriber.request(1);
-				return true;
-			}
-			return false;
+		if (!this.exchange.receiveNext()) {
+			return null;
 		}
-		catch (InterruptedException ex) {
-			close();
-			throw ex;
-		}
+		T item = this.exchange.next();
+		// Give the publisher back the slot the item freed
+		this.subscriber.request(1);
+		return item;
 	}
 
 	@Override
-	public T next() {
-		return this.exchange.next();
-	}
-
-	@Override
-	public void close() {
-		this.closed = true;
+	protected void handleClose(@Nullable Throwable failure) {
 		this.subscriber.cancel(); // stops the inflow, also if not yet subscribed
 		this.exchange.close(); // discards buffered items
 	}

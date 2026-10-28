@@ -81,6 +81,16 @@ public class PublisherSourceTests {
 	}
 
 	@Test
+	public void subscribeFailureClosesSource() throws IOException, InterruptedException {
+		IllegalStateException ex = new IllegalStateException("boom");
+		Source<String> source = FlowSourceAdapter.toSource(subscriber -> {
+			throw ex;
+		});
+		assertThatThrownBy(source::receiveNext).isSameAs(ex);
+		assertThatThrownBy(source::receiveNext).as("should not hang").isSameAs(ex);
+	}
+
+	@Test
 	public void closeCancelsSubscription() throws Exception {
 		TestPublisher<String> publisher = TestPublisher.create();
 		Source<String> source = FlowSourceAdapter.toSource(JdkFlowAdapter.publisherToFlowPublisher(publisher));
