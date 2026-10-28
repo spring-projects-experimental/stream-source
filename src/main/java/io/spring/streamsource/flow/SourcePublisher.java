@@ -276,6 +276,8 @@ final class SourcePublisher<T> implements Publisher<T> {
 				error(ex);
 			}
 			catch (Throwable ex) {
+				// Such as a ClosedByInterruptException, which leaves the interrupt set
+				interrupted = Thread.interrupted();
 				error(ex);
 			}
 			finally {

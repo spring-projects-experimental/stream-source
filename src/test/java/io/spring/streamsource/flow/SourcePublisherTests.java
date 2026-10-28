@@ -1,6 +1,7 @@
 package io.spring.streamsource.flow;
 
 import java.io.IOException;
+import java.nio.channels.ClosedByInterruptException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -251,6 +252,21 @@ public class SourcePublisherTests {
 	}
 
 	@Test
+	public void interruptFromAChannelReadIsRestoredAfterClose() {
+		InterruptedChannelSource source = new InterruptedChannelSource();
+		ThreadPerTaskExecutor executor = new ThreadPerTaskExecutor();
+		AtomicBoolean errorWhileInterrupted = new AtomicBoolean();
+		StepVerifier.create(JdkFlowAdapter.flowPublisherToFlux(FlowSourceAdapter.toPublisher(source, executor))
+						.doOnError(ex -> errorWhileInterrupted.set(Thread.currentThread().isInterrupted())))
+				.expectError(ClosedByInterruptException.class)
+				.verify(Duration.ofSeconds(5));
+		await(executor.finished);
+		assertThat(errorWhileInterrupted).isFalse();
+		assertThat(source.closedWhileInterrupted).isFalse();
+		assertThat(executor.interruptedAfterRun).isTrue();
+	}
+
+	@Test
 	public void onSubscribeFailureClosesSource() {
 		ListSource<String> source = new ListSource<>("a");
 		IllegalStateException ex = new IllegalStateException("boom");
@@ -445,6 +461,33 @@ public class SourcePublisherTests {
 		protected @Nullable String receiveItem() {
 			this.virtual.set(Thread.currentThread().isVirtual());
 			return null;
+		}
+	}
+
+
+	/**
+	 * Source whose receive fails as a channel read does when the thread is interrupted:
+	 * with a {@link ClosedByInterruptException}, and the interrupt still set. Not an
+	 * {@link AbstractSource}, which would close itself on the failure.
+	 */
+	private static final class InterruptedChannelSource implements Source<String> {
+
+		private final AtomicBoolean closedWhileInterrupted = new AtomicBoolean();
+
+		@Override
+		public boolean receiveNext() throws IOException {
+			Thread.currentThread().interrupt();
+			throw new ClosedByInterruptException();
+		}
+
+		@Override
+		public String next() {
+			throw new IllegalStateException("No received item");
+		}
+
+		@Override
+		public void close() {
+			this.closedWhileInterrupted.set(Thread.currentThread().isInterrupted());
 		}
 	}
 
