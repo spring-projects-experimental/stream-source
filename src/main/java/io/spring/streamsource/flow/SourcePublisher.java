@@ -166,7 +166,8 @@ final class SourcePublisher<T> implements Publisher<T> {
 		/**
 		 * {@inheritDoc}
 		 * <p>Never blocks the calling thread. A receive in progress is interrupted, and
-		 * the loop thread then closes the Source.
+		 * the loop thread then closes the Source. If the Source does not respond to
+		 * interruption, the receive continues until it returns, and its item is discarded.
 		 */
 		@Override
 		public void cancel() {

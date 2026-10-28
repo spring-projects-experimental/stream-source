@@ -43,7 +43,10 @@ public abstract class FlowSourceAdapter {
 	 * stops requesting after exactly as many items as the Source had does not see
 	 * {@code onComplete} until it asks again.
 	 * <p>Cancelling never blocks the calling thread: a receive in progress is interrupted,
-	 * and the receive loop then closes the Source.
+	 * and the receive loop then closes the Source. If the Source does not respond to
+	 * interruption, the receive continues until it returns, and the item it returns, if
+	 * any, is discarded. See {@link Thread#interrupt()} for the blocking operations that
+	 * respond to interruption.
 	 * <p>Requires Java 21+, use {@link #toPublisher(Source, Executor)} on Java &lt; 21.
 	 * @param source the source to receive from
 	 * @return a Publisher that emits the items of the Source
