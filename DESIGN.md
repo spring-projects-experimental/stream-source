@@ -13,6 +13,7 @@ The key building blocks are:
 - [Reactive Streams](#reactive-streams-adapters): bridge to Reactive Streams `Publisher` in both directions.
 
 For further insight and context, see [FAQ.md](FAQ.md).
+For how background tasks are stopped through thread interrupts, see [CANCELLATION.md](CANCELLATION.md).
 
 
 # Source
@@ -24,6 +25,7 @@ It is `AutoCloseable` to release underlying resources such as a connection.
 
 - `receiveNext()` does the actual work to receive the next item. 
    It blocks until a complete item is available, and can throw `IOException` or `InterruptedException`.
+   A blocked receive may be cancelled by interrupting the receiving thread, see [CANCELLATION.md](CANCELLATION.md).
 - `next()` simply provides access to the received item.
    It is guaranteed to return a value after `receiveNext()` returns `true`.
 - The stream ends when `receiveNext()` returns `false` or the consumer calls `close()`.
@@ -137,6 +139,7 @@ try (Source<String> source = activeSource.start()) {
 
 The lifecycle of the producer thread is managed by `ActiveSource`.
 The `close()` method of the returned `Source` cancels the producer task and awaits its completion.
+Cancelling interrupts the producer task, and `close()` returns once the task responds, see [CANCELLATION.md](CANCELLATION.md).
 
 By default, the producer task runs on a virtual thread on Java 21+.
 For earlier versions, an `ExecutorService` is expected to be passed in.
@@ -184,6 +187,7 @@ Backpressure is applied when the `Exchange` is full, and the capacity is configu
 
 The fan-out task ends when the returned `Sink` completes and all items have been processed by all listeners.
 Use `awaitCompletion()` to wait for the background fan-out task to end.
+Use `cancel()` to stop it early, which interrupts the fan-out task and any listener invocations in progress, see [CANCELLATION.md](CANCELLATION.md).
 
 ```java
 Sink<String> listener1 = ... // e.g. an Exchange for another consumer
@@ -219,4 +223,6 @@ There are adapters in both directions, to and from Reactive Streams.
 [FlowSourceAdapter](src/main/java/io/spring/streamsource/flow/FlowSourceAdapter.java) is the main class for the bridge.
 It uses `java.util.concurrent.Flow` interfaces from the JDK library, with no extra dependency.
 It's easy to connect further to `org.reactivestreams.Publisher` and Reactor `Flux` via built-in adapters included in each.
+
+When a `Source` is exposed as a `Flow.Publisher`, cancelling the subscription interrupts the thread that receives from the `Source`, see [CANCELLATION.md](CANCELLATION.md).
 
