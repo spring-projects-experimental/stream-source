@@ -13,7 +13,6 @@ The key building blocks are:
 - [Reactive Streams](#reactive-streams-adapters): bridge to Reactive Streams `Publisher` in both directions.
 
 For further insight and context, see [FAQ.md](FAQ.md).
-For how background tasks are stopped through thread interrupts, see [CANCELLATION.md](CANCELLATION.md).
 
 
 # Source

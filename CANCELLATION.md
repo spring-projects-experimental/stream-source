@@ -1,21 +1,25 @@
 
-There are cases where *stream-source* starts a background task and may need to stop it:
+There are cases where *stream-source* needs to stop a background task it started:
 
-- [ActiveSource](src/main/java/io/spring/streamsource/task/ActiveSource.java) runs a producer task that pushes into an `Exchange`.
-  Closing the `Source` side of the exchange must stop the producer task.
-- The `Flow.Publisher` from [FlowSourceAdapter](src/main/java/io/spring/streamsource/flow/FlowSourceAdapter.java) runs a background task to receive from the upstream `Source`.
-  When the downstream `Subscriber` cancels its subscription, the task must stop.
+- [ActiveSource](src/main/java/io/spring/streamsource/task/ActiveSource.java) runs a producer task that must be stopped if the consumer goes away.
+- [FlowSourceAdapter](src/main/java/io/spring/streamsource/flow/FlowSourceAdapter.java) runs a task to receive from a `Source`,
+  and it must be stopped if the downstream `Subscriber` cancels.
 
-[Thread#interrupt](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/lang/Thread.html#interrupt()) is the main mechanism in Java to stop an executing thread.
-It is what `Future.cancel(true)` and `ExecutorService.shutdownNow()` use, and it is also how [structured concurrency](https://openjdk.org/jeps/543#Cancellation) cancels subtasks.
+In Java, [Thread interrupt](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/lang/Thread.html#interrupt()) is the mechanism to stop an executing thread.
+It is what `Future.cancel(true)` and `ExecutorService.shutdownNow()` do, and it is what [structured concurrency](https://openjdk.org/jeps/543#Cancellation) uses as well.
 
 Thread interrupt is not equally effective everywhere.
 Whether it unblocks a thread, and what happens to the underlying resource, depends on the JDK API, the type of resource, and whether the thread is platform or virtual thread.
 
-This document provides a high level, practical overview.
+Here we provide a brief introduction to the topic:
+
+- [How thread interrupt works](#how-thread-interrupt-works)
+- [Support for interruption in the JDK library](#interrupt-support-in-jdk-libraries-)
+- [What this means for stream-source](#what-this-means-for-stream-source)
+- [Alternatives](#alternatives)
 
 
-# Thread Interrupt Overview
+# How Thread Interrupt Works?
 
 An interrupt is cooperative.
 It sets the interrupt status of the thread, and leaves it to the code running on that thread to respond.
@@ -24,11 +28,11 @@ Other code notices the interrupt only if it checks the Thread interrupt status.
 
 There are three possible outcomes from interrupting a blocked method call:
 
-- **Unblock, resource intact** — the call throws, and whatever it was waiting on remains usable.
+- **Unblocked, resource intact** — the call throws, but whatever it was waiting on remains usable.
   This is typical for `java.util.concurrent` utilities.
-- **Unblock, resource closed** — the call throws, and the underlying resource is closed.
+- **Unblocked, resource** — the call throws, and the underlying resource is closed.
   This is typical where interrupts are supported.
-- **Ignored** — only the interrupt status is set, and the thread remains blocked until the call returns on its own.
+- **Ignored** — the interrupt status is set, but the thread remains blocked until the call returns on its own.
 
 Code that catches `InterruptedException` should not swallow it.
 If it cannot rethrow, it should restore the interrupt status with `Thread.currentThread().interrupt()`, so that code further up can notice it.
@@ -37,7 +41,7 @@ Note that `CompletableFuture.cancel(true)` does not interrupt the thread running
 The `mayInterruptIfRunning` argument has no effect in that implementation.
 
 
-# Support for Interruption
+# Interrupt Support in JDK Libraries 
 
 ## Network I/O
 
@@ -142,7 +146,7 @@ Some wait mechanisms ignore interrupts completely:
 # What This Means for stream-source
 
 When the `ActiveSource` producer task, or the receiving task of a `Flow.Publisher` is cancelled, the task is interrupted.
-The interrupt may or may not be take effect immediately, as described in the previous section [Support for Interruption](#support-for-interruption).
+The interrupt may or may not be take effect immediately, as described in the previous section [Support for Interruption](#interrupt-support-in-jdk-libraries-).
 
 It works significantly better on Java 21+, where tasks run on virtual threads by default, and therefore blocking operations on classic socket I/O respond to interrupts.
 
