@@ -173,6 +173,7 @@ However, it is possible to do it through a `Source` decorator.
 ## Timed Polling
 
 If a resource supports receiving with a timeout, a `Source` can receive in a loop with a short timeout, and check the interrupt status in between.
+
 For example, a `Socket` with `SO_TIMEOUT` on a platform thread:
 
 ```java
