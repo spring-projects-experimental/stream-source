@@ -146,7 +146,7 @@ Some wait mechanisms ignore interrupts completely:
 # What This Means for stream-source
 
 When the `ActiveSource` producer task, or the receiving task of a `Flow.Publisher` is cancelled, the task is interrupted.
-The interrupt may or may not be take effect immediately, as described in the previous section [Support for Interruption](#interrupt-support-in-jdk-libraries-).
+The interrupt may or may not take effect immediately, as described in the previous section [Support for Interruption](#interrupt-support-in-jdk-libraries-).
 
 It works significantly better on Java 21+, where tasks run on virtual threads by default, and therefore blocking operations on classic socket I/O respond to interrupts.
 
