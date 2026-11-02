@@ -6,7 +6,7 @@ There are cases where *stream-source* needs to stop a background task it started
   and it must be stopped if the downstream `Subscriber` cancels.
 
 In Java, [Thread interrupt](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/lang/Thread.html#interrupt()) is the mechanism to stop an executing thread.
-It is what `Future.cancel(true)` and `ExecutorService.shutdownNow()` do, and it is what [structured concurrency](https://openjdk.org/jeps/543#Cancellation) uses as well.
+It is what `Future.cancel(true)` and `ExecutorService.shutdownNow()` do, and it is what [Structured Concurrency](https://openjdk.org/jeps/543#Cancellation) uses as well.
 
 Thread interrupt is not equally effective everywhere.
 Whether it unblocks a thread, and what happens to the underlying resource, depends on the JDK API, the type of resource, and whether the thread is platform or virtual thread.
