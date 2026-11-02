@@ -9,7 +9,7 @@ In Java, [Thread interrupt](https://docs.oracle.com/en/java/javase/25/docs/api/j
 It is what `Future.cancel(true)` and `ExecutorService.shutdownNow()` do, and it is what [Structured Concurrency](https://openjdk.org/jeps/543#Cancellation) uses as well.
 
 Thread interrupt is not equally effective everywhere.
-Whether it unblocks a thread, and what happens to the underlying resource, depends on the JDK API, the type of resource, and whether the thread is platform or virtual thread.
+Whether it unblocks a thread, and what happens to the underlying resource, depends on the JDK API, the type of resource, and whether the thread is platform or virtual.
 
 Here we provide a brief introduction to the topic:
 
