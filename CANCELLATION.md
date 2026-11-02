@@ -30,7 +30,7 @@ There are three possible outcomes from interrupting a blocked method call:
 
 - **Unblocked, resource intact** — the call throws, but whatever it was waiting on remains usable.
   This is typical for `java.util.concurrent` utilities.
-- **Unblocked, resource** — the call throws, and the underlying resource is closed.
+- **Unblocked, resource closed** — the call throws, and the underlying resource is closed.
   This is typical where interrupts are supported.
 - **Ignored** — the interrupt status is set, but the thread remains blocked until the call returns on its own.
 
