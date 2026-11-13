@@ -3,35 +3,83 @@ package io.spring.streamsource;
 import java.io.IOException;
 
 /**
- * Contract to receive items from a Source.
- * @param <T> the types of items received from the Source
+ * Contract to receive a stream of items in an imperative loop. It has the
+ * simplicity of {@link java.util.Iterator}, but for items from a remote target,
+ * with a lifecycle and the possibility for network failures.
+ *
+ * <p>Call {@link #receiveNext()} to receive an item, and {@link #next()} to
+ * access it. The stream ends when {@code receiveNext()} returns {@code false}
+ * or when the consumer calls {@link #close()}. A {@code Source} holds
+ * underlying resources and is intended to use in try-with-resources:
+ *
+ * <pre class="code">
+ * try (Source&lt;String&gt; source = ...) {
+ *     while (source.receiveNext()) {
+ *         String item = source.next();
+ *         // process item (never null)
+ *     }
+ * }
+ * </pre>
+ *
+ * <p>{@code Source} is for use from a single thread. {@code receiveNext()}
+ * and {@code next()} must not be called concurrently. A blocked
+ * {@code receiveNext()} can be cancelled by interrupting the receiving thread,
+ * see <a href="https://github.com/spring-projects-experimental/stream-source/blob/main/CANCELLATION.md">CANCELLATION.md</a>.
+ *
+ * <p>To implement a {@code Source}, extend {@link AbstractSource}.
+ * For an independent producer-consumer hand-off, see {@link Exchange}.
+ *
+ * @see AbstractSource
+ * @see Exchange
+ *
+ * @param <T> the type of items received from the Source
  */
 public interface Source<T> extends AutoCloseable {
 
 	/**
-	 * Request to receive the next item from the Source.
-	 * <p>A return value of {@code true} guarantees {@link #next()} will return
-	 * an item, while {@code false} means the Source won't return more items.
-	 * <p>Each call receives a new item, possibly discarding the previous item
-	 * if {@link #next()} wasn't called.
-	 * @return {@code true} if there is at least one item to receive
+	 * Receive the next item from the Source, blocking until a complete item is
+	 * available or the end of the stream is reached.
+	 * <p>A return value of {@code true} means an item was received, and
+	 * {@link #next()} will return it. If called again without {@code next()},
+	 * this method receives the next item and discards the current one.
+	 * <p>A return value of {@code false} means the Source has ended, or was
+	 * {@link #close() closed} and will not return more items. If this method
+	 * fails, the Source is closed and cannot receive more items. Once a Source
+	 * ends, subsequent calls produce the same result without blocking, either
+	 * a {@code false} return value or the same exception.
+	 * @return {@code true} if an item was successfully received, or
+	 * {@code false} if the Source has ended
 	 * @throws IOException if the receive encounters an I/O error
-	 * @throws InterruptedException if the current thread is interrupted,
-	 * the Source should close
+	 * @throws InterruptedException if the receiving thread is interrupted
+	 * @throws RuntimeException if the receive fails for any other reason
 	 */
 	boolean receiveNext() throws IOException, InterruptedException;
 
 	/**
-	 * Return the next item. Calls to this method must be preceeded by a call to
-	 * {@link #receiveNext()} that returns {@code true}, and may be called only
-	 * once to retrieve a given item.
-	 * @throws IllegalStateException if the call was not preceeded by a call to
-	 * {@link #receiveNext()} that returned {@code true}
+	 * Return the item received by the last call to {@link #receiveNext()}.
+	 * Each item can be retrieved only once, and the call must be preceded by a
+	 * call to {@code receiveNext()} that returned {@code true}.
+	 * <p>The result of calling this method after {@link #close()} is
+	 * unspecified.
+	 * @return the received item, never {@code null}
+	 * @throws IllegalStateException if the call was not preceded by a call to
+	 * {@code receiveNext()} that returned {@code true}, or if the item was
+	 * already retrieved
 	 */
 	T next();
 
 	/**
-	 * Close the Source and discard any received items.
+	 * Close the Source to release underlying resources such as a connection.
+	 * Subsequent calls to {@link #receiveNext()} return {@code false}, and
+	 * {@link #next()} cannot be relied to return a received item.
+	 * <p>This method is idempotent, and does not throw checked exceptions.
+	 * Failures to release resources are not propagated.
+	 * <p>Closing does not necessarily unblock a {@code receiveNext()} that is
+	 * blocked in another thread. To cancel a blocked receive, interrupt the
+	 * receiving thread.
+	 * <p>For an {@link Exchange}, closing from the Source side discards items
+	 * that were sent but not yet received, and causes further calls to
+	 * {@link Sink#send} to fail with {@link SinkCompleteException}.
 	 */
 	@Override
 	void close();
