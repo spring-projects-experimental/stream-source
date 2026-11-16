@@ -3,14 +3,14 @@ package io.spring.streamsource;
 import java.io.IOException;
 
 /**
- * Contract to receive a stream of items in an imperative loop. It has the
- * simplicity of {@link java.util.Iterator}, but for items that may be received
- * from a remote host, with a lifecycle and possible network failures.
+ * Contract to receive a stream of items in an imperative loop. Similar to
+ * {@link java.util.Iterator}, but for items that may be received from a remote
+ * host, with a connection lifecycle and potential network failures.
  *
  * <p>Call {@link #receiveNext()} to receive an item, and {@link #next()} to
  * access it. The stream ends when {@code receiveNext()} returns {@code false}
- * or when the consumer calls {@link #close()}. A {@code Source} holds
- * underlying resources and is intended to use in try-with-resources:
+ * or after a call to {@link #close()}. A {@code Source} holds underlying
+ * resources and is intended to use in try-with-resources:
  *
  * <pre class="code">
  * try (Source&lt;String&gt; source = ...) {
@@ -21,11 +21,12 @@ import java.io.IOException;
  * }
  * </pre>
  *
- * <p>{@code Source} is generally for use from a single thread, and that means
- * calling {@link #receiveNext()} and {@link #next()} from one thread. A blocked
- * {@link #receiveNext()} may be cancelled by interrupting the receiving thread,
- * see <a href="https://github.com/spring-projects-experimental/stream-source/blob/main/CANCELLATION.md">CANCELLATION.md</a>.
- * In addition, the {@link #close()} method may be called from another thread.
+ * <p>The {@code Source} receiving loop is intended to run on a single thread,
+ * with {@link #receiveNext()} and {@link #next()} called in a sequence.
+ * If necessary, a blocked receive may be cancelled by interrupting the
+ * receiving thread, see
+ * <a href="https://github.com/spring-projects-experimental/stream-source/blob/main/CANCELLATION.md">CANCELLATION.md</a>.
+ * In addition, {@link #close()} may be called from a different thread.
  *
  * <p>To implement a {@code Source}, extend {@link AbstractSource}.
  * For an independent producer-consumer hand-off, see {@link Exchange}.
@@ -75,10 +76,10 @@ public interface Source<T> extends AutoCloseable {
 	 * {@link #next()} cannot be relied on to return a received item.
 	 * <p>This method is idempotent, and does not throw checked exceptions.
 	 * Failures to release resources are not propagated.
-	 * <p>The preferred way to cancel a blocked {@link #receiveNext()} is to
-	 * interrupt the receiving thread. If necessary, {@code close()} may be called
-	 * from another thread, currently supported for subclasses of
-	 * {@link AbstractSource}, but not by {@link BlockingQueueExchange}.
+	 * <p>A blocked receive may be cancelled by interrupting the receiving
+	 * thread. In addition, {@code close()} may be called from a different
+	 * thread. That's currently supported for subclasses of
+	 * {@link AbstractSource}, but not for {@link BlockingQueueExchange}.
 	 * <p>Closing an {@link Exchange} from the Source side discards items that
 	 * were sent but not yet received, and causes further calls to
 	 * {@link Sink#send} to fail with {@link SinkCompleteException}.
