@@ -179,14 +179,15 @@ public abstract class AbstractSource<T> implements Source<T> {
 
 	/**
 	 * Subclasses can override this method to perform resource cleanup when the
-	 * {@code Source} is closed via {@link #close()}, at the end of the stream,
-	 * or as a result of a failure in {@link #receiveItem()}.
-	 * <p>This method is called exactly once on the thread that closes the Source.
-	 * The default implementation does nothing.
+	 * {@code Source} is either closed via {@link #close()} at the end of the
+	 * stream, or after a failure in {@link #receiveItem()}. It is guaranteed
+	 * to not be called more than once.
+	 * <p>The default implementation does nothing.
 	 * @param failure {@code null} if the Source was closed via {@link #close()}
 	 * or at the end of the stream, otherwise it's the exception thrown by
-	 * {@link #receiveItem()}, including {@code InterruptedException}
-	 * @throws IOException if cleanup fails
+	 * {@link #receiveItem()}
+	 * @throws IOException if cleanup fails; the {@code IOException} if not
+	 * handled is logged at DEBIG level and swallowed.
 	 */
 	protected void handleClose(@Nullable Throwable failure) throws IOException {
 	}

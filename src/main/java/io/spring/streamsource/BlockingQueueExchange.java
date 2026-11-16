@@ -7,9 +7,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import org.jspecify.annotations.Nullable;
 
 /**
- * A {@link BlockingQueue}-backed {@link Exchange}. A {@code BlockingQueueExchange}
- * only maintains the queue of items — it has no knowledge of what fills it or
- * what drains it.
+ * A {@link BlockingQueue}-backed {@link Exchange}.
  *
  * <p>The queue is bounded. Items are received in the order they were sent.
  * When the queue is full, {@link #send} blocks until the consumer makes room,

@@ -18,6 +18,10 @@ import java.io.IOException;
  *     sink.send("two");
  *     sink.complete();
  * }
+ * catch (InterruptedException ex) {
+ *     Thread.currentThread().interrupt();
+ *     sink.completeExceptionally(new RuntimeException("Sending interrupted", ex));
+ * }
  * catch (Throwable ex) {
  *     sink.completeExceptionally(ex);
  * }
@@ -58,7 +62,7 @@ public interface Sink<T> {
 
 	/**
 	 * Complete the Sink normally, signaling there are no more items to send.
-	 * <p>This method does not block, even if the Sink is full, and does not
+	 * <p>This method must not block, even if the Sink is full, and does not
 	 * throw {@link SinkCompleteException}. It is idempotent: if the Sink is
 	 * already completed, normally or with an error, the call has no effect and
 	 * the first completion wins.
