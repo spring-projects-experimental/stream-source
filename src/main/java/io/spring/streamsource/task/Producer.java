@@ -1,6 +1,7 @@
 package io.spring.streamsource.task;
 
 import io.spring.streamsource.Sink;
+import io.spring.streamsource.SinkCompleteException;
 import io.spring.streamsource.Source;
 
 /**
@@ -11,9 +12,12 @@ import io.spring.streamsource.Source;
 public interface Producer<T> {
 
 	/**
-	 * Produce items into the given {@code Sink}.
-	 * <p>Implementations may choose to leave the sink open. Callers should use
-	 * {@link #produceAndComplete(Sink)} to ensure the sink is completed.
+	 * Produce items into a {@code Sink}.
+	 * <p>Implementations don't need to complete the {@code Sink}, and shouldn't
+	 * assume its lifecycle ends after the method returns. Implementations may
+	 * handle exceptions or let them propagate. Generally, callers are expected
+	 * to use {@link #produceAndComplete(Sink)} to guarantee Sink completion in
+	 * any outcome.
 	 * @param sink the Sink to push items into
 	 * @throws Throwable an unhandled error encountered by the producer
 	 */
@@ -27,6 +31,10 @@ public interface Producer<T> {
 		try {
 			produce(sink);
 			sink.complete();
+		}
+		catch (InterruptedException ex) {
+			Thread.currentThread().interrupt();
+			sink.completeExceptionally(new RuntimeException("Producer interrupted", ex));
 		}
 		catch (Throwable ex) {
 			sink.completeExceptionally(ex);
