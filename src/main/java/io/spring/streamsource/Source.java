@@ -79,7 +79,8 @@ public interface Source<T> extends AutoCloseable {
 	 * <p>A blocked receive may be cancelled by interrupting the receiving
 	 * thread. In addition, {@code close()} may be called from a different
 	 * thread. That's currently supported for subclasses of
-	 * {@link AbstractSource}, but not for {@link BlockingQueueExchange}.
+	 * {@link AbstractSource}, but not for {@link BlockingQueueExchange},
+	 * see <a href="https://github.com/spring-projects-experimental/stream-source/issues/9">GitHub issue</a>.
 	 * <p>Closing an {@link Exchange} from the Source side discards items that
 	 * were sent but not yet received, and causes further calls to
 	 * {@link Sink#send} to fail with {@link SinkCompleteException}.

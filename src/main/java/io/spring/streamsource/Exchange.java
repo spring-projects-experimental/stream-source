@@ -29,7 +29,7 @@ package io.spring.streamsource;
  * <p>Sink and Source are asymmetric in regard to lifecycle:
  * <ul>
  * <li>The producer can complete the {@code Sink} to signal the end of the
- * stream, but the exchange remains open all items are received orderly.
+ * stream, but the exchange remains open untill all items are received orderly.
  * Only then the Exchange becomes closed.
  * <li>The consumer can close the Exchange at any time, in effect discarding any
  * in-flight items. Subsequent calls to {@code send} on the Sink side throw

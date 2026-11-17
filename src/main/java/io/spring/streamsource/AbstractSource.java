@@ -187,7 +187,7 @@ public abstract class AbstractSource<T> implements Source<T> {
 	 * or at the end of the stream, otherwise it's the exception thrown by
 	 * {@link #receiveItem()}
 	 * @throws IOException if cleanup fails; the {@code IOException} if not
-	 * handled is logged at DEBIG level and swallowed.
+	 * handled is logged at DEBUG level and swallowed.
 	 */
 	protected void handleClose(@Nullable Throwable failure) throws IOException {
 	}

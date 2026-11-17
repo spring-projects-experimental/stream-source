@@ -27,8 +27,9 @@ import java.io.IOException;
  * }
  * </pre>
  *
- * <p>{@code send} is for a single producer thread, and must not be called
- * concurrently. The completion methods can be called from any thread.
+ * <p>Callers should not assume that implementations support concurrent use
+ * unless explicitly stated by the implementation. That means implementations
+ * can assume serial calls, but may choose to support concurrent calls.
  *
  * <p>Sink is typically backed by {@link Exchange}, which enables a hand-off
  * between an independent producer and consumer.
