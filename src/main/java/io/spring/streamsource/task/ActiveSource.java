@@ -58,6 +58,8 @@ public final class ActiveSource<T> {
 
 	private @Nullable Integer capacity;
 
+	private volatile boolean started;
+
 
 	private ActiveSource(Producer<T> producer, ExecutorService executorService) {
 		this.producer = producer;
@@ -83,11 +85,17 @@ public final class ActiveSource<T> {
 	/**
 	 * Submit the Producer to run on a background thread so it can begin pushing
 	 * items into the Exchange while the Source can be read independently.
-	 * <p>This method returns immediately after submitting the task.
+	 * <p>This method returns immediately after submitting the task, and is
+	 * meant to be called only once.
 	 * @return the {@code Source} side of the Exchange to receive from, which
 	 * stops the producer when closed
+	 * @throws IllegalStateException if already started
 	 */
 	public Source<T> start() {
+		if (this.started) {
+			throw new IllegalStateException("Already started");
+		}
+		this.started = true;
 		Exchange<T> exchange = initExchange();
 		ProducerTask<T> task = new ProducerTask<>(this.producer, exchange);
 		Future<?> future = this.executorService.submit(task);

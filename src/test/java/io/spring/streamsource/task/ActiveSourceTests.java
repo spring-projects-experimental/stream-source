@@ -17,6 +17,7 @@ import org.junit.jupiter.params.shadow.de.siegmar.fastcsv.util.Nullable;
 
 import static io.spring.streamsource.TestSourceUtils.toList;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 /**
@@ -30,6 +31,14 @@ public class ActiveSourceTests {
 		Producer<String> producer = TestProducer.withItems("a", "b");
 		try (Source<String> source = startProducer(producer)) {
 			assertThat(toList(source)).containsExactly("a", "b");
+		}
+	}
+
+	@Test
+	public void startWorksOnceOnly() {
+		ActiveSource<String> activeSource = ActiveSource.fromProducer(sink -> {});
+		try (Source<String> source = activeSource.start()) {
+			assertThatIllegalStateException().isThrownBy(activeSource::start).withMessage("Already started");
 		}
 	}
 
