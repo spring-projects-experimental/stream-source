@@ -34,12 +34,13 @@ import org.jspecify.annotations.Nullable;
  * </pre>
  *
  * <p>Closing the Source returned from {@code start()} cancels the producer by
- * interrupting its thread, and then waits for the task to finish, blocking for
- * as long as the producer takes to respond to the interrupt, see
+ * interrupting its thread, if still running, and then waits for the task to
+ * finish, blocking for as long as the producer takes to handle the interrupt, see
  * <a href="https://github.com/spring-projects-experimental/stream-source/blob/main/CANCELLATION.md">CANCELLATION.md</a>.
- * The consumer must close the {@code Source}, e.g. via try-with-resources,
- * or otherwise once the exchange is full, the producer will block in
- * {@code send} and hold on to its thread.
+ *
+ * <p>The consumer must close the {@code Source}, e.g. via try-with-resources,
+ * or otherwise once the exchange is full, the producer will block indefinitely
+ * in {@code send} holding on to its thread.
  *
  * <p>By default, the {@code Producer} runs on a virtual thread, which requires
  * Java 21+. On Java &lt; 21, use the factory methods accepting an

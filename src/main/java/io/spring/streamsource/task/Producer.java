@@ -83,7 +83,7 @@ public interface Producer<T> {
 	 * consumed from in a try-with-resources block, and guaranteed to be closed
 	 * for any outcome.
 	 * <p>The returned Producer can be used only once since the {@code Source}
-	 * is closed, and a second loop will not receive any moreitems.
+	 * is closed, and a second loop will not receive any more items.
 	 * @param <T> the type of items received and produced
 	 * @param source the source to receive from
 	 * @return the producer instance
