@@ -2,17 +2,12 @@ package io.spring.streamsource.task;
 
 import io.spring.streamsource.Sink;
 import io.spring.streamsource.Source;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * {@link Producer} that produces items consumed from a {@link Source}.
  * @param <T> the type of items produced
  */
 final class SourceProducerAdapter<T> implements Producer<T> {
-
-	private static final Logger log = LoggerFactory.getLogger(SourceProducerAdapter.class);
-
 
 	private final Source<T> source;
 

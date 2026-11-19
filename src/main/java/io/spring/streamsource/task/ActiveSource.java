@@ -15,13 +15,31 @@ import org.jspecify.annotations.Nullable;
 /**
  * A helper class to start a {@link Producer} that pushes items into an
  * {@link Exchange} on a background thread. A consumer can then receive from the
- * {@link Source} side of the exchange, indepnedent of the producer, and with
+ * {@link Source} side of the exchange, independent of the producer, and with
  * backpressure provided by the exchange.
  *
  * <p>Use the available static factory methods to create an {@code ActiveSource},
  * and then call {@link #start()} to start the {@code Producer} and obtain the
- * {@code Source} side of the exchange to receive from. When the {@code Source}
- * is closed, the producer is stopped.
+ * {@code Source} side of the exchange to receive from.
+ *
+ * <pre class="code">
+ * ActiveSource&lt;String&gt; activeSource = ActiveSource.fromProducer(producer);
+ *
+ * try (Source&lt;String&gt; source = activeSource.start()) {
+ *     while (source.receiveNext()) {
+ *         String item = source.next();
+ *         // process item
+ *     }
+ * }
+ * </pre>
+ *
+ * <p>Closing the Source returned from {@code start()} cancels the producer by
+ * interrupting its thread, and then waits for the task to finish, blocking for
+ * as long as the producer takes to respond to the interrupt, see
+ * <a href="https://github.com/spring-projects-experimental/stream-source/blob/main/CANCELLATION.md">CANCELLATION.md</a>.
+ * The consumer must close the {@code Source}, e.g. via try-with-resources,
+ * or otherwise once the exchange is full, the producer will block in
+ * {@code send} and hold on to its thread.
  *
  * <p>By default, the {@code Producer} runs on a virtual thread, which requires
  * Java 21+. On Java &lt; 21, use the factory methods accepting an
@@ -50,7 +68,10 @@ public final class ActiveSource<T> {
 	/**
 	 * Set the capacity for the internal {@link Exchange} that the
 	 * {@code Producer} pushes into and that backs the active {@code Source}.
-	 * @param capacity the capacity to use
+	 * <p>The capacity is the number of items the {@code Exchange} holds before
+	 * the producer blocks, and must be greater than zero.
+	 * <p>By default, it is {@value BlockingQueueExchange#DEFAULT_CAPACITY}.
+	 * @param capacity the capacity to use, in number of items
 	 * @return the same instance for chaining
 	 */
 	public ActiveSource<T> capacity(int capacity) {
@@ -58,10 +79,13 @@ public final class ActiveSource<T> {
 		return this;
 	}
 
+
 	/**
 	 * Submit the Producer to run on a background thread so it can begin pushing
 	 * items into the Exchange while the Source can be read independently.
-	 * @return this Source instance, for chaining after creation
+	 * <p>This method returns immediately after submitting the task.
+	 * @return the {@code Source} side of the Exchange to receive from, which
+	 * stops the producer when closed
 	 */
 	public Source<T> start() {
 		Exchange<T> exchange = initExchange();
@@ -81,9 +105,9 @@ public final class ActiveSource<T> {
 	 * running on a virtual thread.
 	 * <p>Requires Java 21+, use {@link #fromSource(Source, ExecutorService)} on
 	 * Java &lt; 21.
+	 * @param <T> the type of items produced
 	 * @param source the source to consume from
 	 * @return the created instance
-	 * @param <T> the types of items produced
 	 * @throws IllegalStateException if virtual threads are not supported
 	 */
 	public static <T> ActiveSource<T> fromSource(Source<T> source) {
@@ -97,13 +121,13 @@ public final class ActiveSource<T> {
 	 * <em>Ensure the consumer of the created instance and the reading of the given
 	 * {@code Source} run on different {@code ExecutorService} instances to avoid
 	 * deadlocks.</em>
+	 * @param <T> the type of items produced
 	 * @param source the source to consume from
 	 * @param executorService the executor service used to run the {@code Producer};
 	 * can be used to provide a non-virtual threads {@code ExecutorService} (e.g. a
 	 * thread pool with platform threads), compatible with Java &lt; 21. The caller
 	 * is responsible for managing its lifecycle.
 	 * @return the created instance
-	 * @param <T> the types of items produced
 	 */
 	public static <T> ActiveSource<T> fromSource(Source<T> source, ExecutorService executorService) {
 		return fromProducer(Producer.fromSource(source), executorService);
@@ -113,9 +137,9 @@ public final class ActiveSource<T> {
 	 * Create an instance with the given {@code Producer}, running on a virtual thread.
 	 * <p>Requires Java 21+, use {@link #fromProducer(Producer, ExecutorService)} on
 	 * Java &lt; 21.
+	 * @param <T> the type of items produced
 	 * @param producer the producer of items
 	 * @return the created instance
-	 * @param <T> the types of items produced
 	 * @throws IllegalStateException if virtual threads are not supported
 	 */
 	public static <T> ActiveSource<T> fromProducer(Producer<T> producer) {
@@ -134,13 +158,13 @@ public final class ActiveSource<T> {
 	 * <br>
 	 * <em>Ensure the consumer and producer run on different {@code ExecutorService}
 	 * instances to avoid deadlocks.</em>
+	 * @param <T> the type of items produced
 	 * @param producer the producer of items
 	 * @param executorService the executor service used to run the {@code Producer};
 	 * can be used to provide a non-virtual threads {@code ExecutorService} (e.g. a
 	 * thread pool with platform threads), compatible with Java &lt; 21. The caller
 	 * is responsible for managing its lifecycle.
 	 * @return the created instance
-	 * @param <T> the types of items produced
 	 */
 	public static <T> ActiveSource<T> fromProducer(Producer<T> producer, ExecutorService executorService) {
 		return new ActiveSource<>(producer, executorService);
