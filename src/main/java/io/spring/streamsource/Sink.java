@@ -74,7 +74,7 @@ public interface Sink<T> {
 
 	/**
 	 * Complete the Sink with an error, signaling no more items will be sent.
-	 * <p>This method does not block, even if the Sink is full, and does not
+	 * <p>This method must not block, even if the Sink is full, and does not
 	 * throw {@link SinkCompleteException}. It is idempotent: if the Sink is
 	 * already completed, normally or with an error, the call has no effect and
 	 * the first completion wins.
