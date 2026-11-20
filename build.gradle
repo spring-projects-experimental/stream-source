@@ -8,14 +8,6 @@ apply from: "$rootDir/gradle/publishing.gradle"
 
 description = 'Stream Source'
 group = 'io.spring.streamsource'
-version = '0.8.0-SNAPSHOT'
-
-ext {
-	// Test dependencies versions
-	reactorVersion = '3.8.7'
-	junitVersion = '6.0.3'
-	log4jVersion = '2.25.5'
-}
 
 java {
 	toolchain {
