@@ -1,0 +1,49 @@
+name: 'Build'
+description: 'Builds the project, optionally publishing it to a local deployment repository'
+inputs:
+  java-distribution:
+    description: 'Java distribution to use'
+    required: false
+    default: 'liberica'
+  java-early-access:
+    description: 'Whether the Java version is in early access'
+    required: false
+    default: 'false'
+  java-version:
+    description: 'Java version to compile and test with'
+    required: false
+    default: '25'
+  publish:
+    description: 'Whether to publish artifacts ready for deployment to Artifactory'
+    required: false
+    default: 'false'
+outputs:
+  version:
+    description: 'Version that was built'
+    value: ${{ steps.read-version.outputs.version }}
+runs:
+  using: composite
+  steps:
+    - name: Prepare Gradle Build
+      uses: ./.github/actions/prepare-gradle-build
+      with:
+        java-distribution: ${{ inputs.java-distribution }}
+        java-early-access: ${{ inputs.java-early-access }}
+        java-version: ${{ inputs.java-version }}
+    - name: Build
+      id: build
+      if: ${{ inputs.publish == 'false' }}
+      shell: bash
+      run: ./gradlew check
+    - name: Publish
+      id: publish
+      if: ${{ inputs.publish == 'true' }}
+      shell: bash
+      run: ./gradlew -PdeploymentRepository=$(pwd)/deployment-repository build publishAllPublicationsToDeploymentRepository
+    - name: Read Version From gradle.properties
+      id: read-version
+      shell: bash
+      run: |
+        version=$(sed -n 's/version=\(.*\)/\1/p' gradle.properties)
+        echo "Version is $version"
+        echo "version=$version" >> $GITHUB_OUTPUT
