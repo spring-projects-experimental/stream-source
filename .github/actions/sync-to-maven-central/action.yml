@@ -1,0 +1,35 @@
+name: Sync to Maven Central
+description: 'Syncs a release to Maven Central and waits for it to be available for use'
+inputs:
+  central-token-password:
+    description: 'Password for authentication with central.sonatype.com'
+    required: true
+  central-token-username:
+    description: 'Username for authentication with central.sonatype.com'
+    required: true
+  jfrog-cli-config-token:
+    description: 'Config token for the JFrog CLI'
+    required: true
+  stream-source-version:
+    description: 'Version of Stream Source that is being synced to Central'
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Set Up JFrog CLI
+      uses: jfrog/setup-jfrog-cli@4c2f06da03095113100534a16d58d8a252680949 # v5.3.5
+      env:
+        JF_ENV_SPRING: ${{ inputs.jfrog-cli-config-token }}
+    - name: Download Release Artifacts
+      shell: bash
+      run: jf rt download --spec ${{ format('{0}/artifacts.spec', github.action_path) }} --spec-vars 'buildName=${{ format('stream-source-{0}', inputs.stream-source-version) }};buildNumber=${{ github.run_number }}'
+    - name: Sync
+      uses: spring-io/central-publish-action@9d5bae959038de695f8af890333341836475bad2 # v0.5.0
+      with:
+        token: ${{ inputs.central-token-password }}
+        token-name: ${{ inputs.central-token-username }}
+        ignore-already-exists-error: true
+    - name: Await
+      uses: ./.github/actions/await-http-resource
+      with:
+        url: ${{ format('https://repo.maven.apache.org/maven2/io/spring/streamsource/stream-source/{0}/stream-source-{0}.jar', inputs.stream-source-version) }}
