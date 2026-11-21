@@ -1,11 +1,64 @@
 apply plugin: 'maven-publish'
 
-// `./gradlew publishToMavenLocal` installs the jars into ~/.m2/repository, for trying
-// them out from another local project.
 publishing {
 	publications {
 		mavenJava(MavenPublication) {
 			from components.java
+			pom {
+				afterEvaluate {
+					name = project.description
+					description = project.description
+				}
+				url = "https://github.com/spring-projects-experimental/stream-source"
+				organization {
+					name = "Broadcom Inc."
+					url = "https://www.spring.io"
+				}
+				licenses {
+					license {
+						name = "Apache License, Version 2.0"
+						url = "https://www.apache.org/licenses/LICENSE-2.0"
+						distribution = "repo"
+					}
+				}
+				scm {
+					url = "https://github.com/spring-projects-experimental/stream-source"
+					connection = "scm:git:git://github.com/spring-projects-experimental/stream-source"
+					developerConnection = "scm:git:git://github.com/spring-projects-experimental/stream-source"
+				}
+				developers {
+					developer {
+						name = "Spring"
+						email = "ask@spring.io"
+					}
+				}
+				issueManagement {
+					system = "GitHub"
+					url = "https://github.com/spring-projects-experimental/stream-source/issues"
+				}
+			}
+			versionMapping {
+				usage('java-api') {
+					fromResolutionResult()
+				}
+				usage('java-runtime') {
+					fromResolutionResult()
+				}
+			}
+		}
+	}
+}
+
+configureDeploymentRepository(project)
+
+static void configureDeploymentRepository(Project project) {
+	project.plugins.withType(MavenPublishPlugin.class).all {
+		PublishingExtension publishing = project.getExtensions().getByType(PublishingExtension.class);
+		if (project.hasProperty("deploymentRepository")) {
+			publishing.repositories.maven {
+				it.url = project.property("deploymentRepository")
+				it.name = "deployment"
+			}
 		}
 	}
 }
