@@ -32,9 +32,12 @@ For more details, see [DESIGN.md](DESIGN.md) and [FAQ.md](FAQ.md).
   Agentic abstraction for Spring AI that uses *stream-source* for its streaming API (to be made public shortly).
 
 
-## Maven Artefact and Dependencies
+## Requirements and Use
 
-To use *stream-source*, add the following dependency:
+`stream-source` has a Java 17+ baseline.
+Virtual threads are used by default on Java 21+.
+
+Maven artifact coordinates:
 
 ```xml
 <dependency>
@@ -44,13 +47,6 @@ To use *stream-source*, add the following dependency:
 </dependency>
 ```
 
-*stream-source* has only two dependencies, [JSpecify](https://jspecify.dev/) and [SLF4J](https://www.slf4j.org/).
+[JSpecify](https://jspecify.dev/) and [SLF4J](https://www.slf4j.org/) are the only required dependencies.
 
-
-## Requirements and Use
-
-`stream-source` has a Java 17+ baseline.
-Virtual threads are used by default on Java 21+.
-
-The published artifacts use the `io.spring.streamsource` group ID, and can be installed
-locally with `./gradlew publishToMavenLocal`.
+Snapshots via https://repo.spring.io/snapshot.
