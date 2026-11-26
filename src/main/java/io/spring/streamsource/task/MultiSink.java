@@ -251,7 +251,7 @@ public final class MultiSink<T> {
 				}
 			}
 			catch (InterruptedException ex) {
-				cause = new RuntimeException("MultiSink send interrupted", ex);
+				cause = new RuntimeException("FanOutTask interrupted", ex);
 			}
 			catch (Throwable ex) {
 				cause = ex;
