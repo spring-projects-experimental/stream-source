@@ -25,14 +25,14 @@ import io.spring.streamsource.Source;
  *
  * <p>Typically, a {@code Producer} runs in a background thread, pushing into an
  * Exchange, while a consumer receives on the current thread. This pattern is
- * supported by {@link ActiveSource}.
+ * supported by {@link SourceTask}.
  *
  * <p><strong>Note:</strong> Producers should not assume that {@code Sink}
  * supports concurrent, see the Javadoc of {@link Sink}.
  *
  * @param <T> the type of items produced
  * @see Source
- * @see ActiveSource
+ * @see SourceTask
  */
 @FunctionalInterface
 public interface Producer<T> {

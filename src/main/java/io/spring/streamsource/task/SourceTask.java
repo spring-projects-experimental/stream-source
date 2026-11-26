@@ -13,19 +13,19 @@ import org.jspecify.annotations.Nullable;
 
 
 /**
- * A helper class to start a {@link Producer} that pushes items into an
- * {@link Exchange} on a background thread. A consumer can then receive from the
- * {@link Source} side of the exchange, independent of the producer, and with
- * backpressure provided by the exchange.
+ * A helper class to start a producer that pushes items into an {@link Exchange}
+ * on a background thread. A consumer can then receive from the {@link Source}
+ * side of the exchange, independent of the producer, and with backpressure
+ * provided by the exchange.
  *
- * <p>Use the available static factory methods to create an {@code ActiveSource},
+ * <p>Use the available static factory methods to create an {@code SourceTask},
  * and then call {@link #start()} to start the {@code Producer} and obtain the
  * {@code Source} side of the exchange to receive from.
  *
  * <pre class="code">
- * ActiveSource&lt;String&gt; activeSource = ActiveSource.fromProducer(producer);
+ * SourceTask&lt;String&gt; sourceTask = SourceTask.fromProducer(producer);
  *
- * try (Source&lt;String&gt; source = activeSource.start()) {
+ * try (Source&lt;String&gt; source = sourceTask.start()) {
  *     while (source.receiveNext()) {
  *         String item = source.next();
  *         // process item
@@ -48,7 +48,7 @@ import org.jspecify.annotations.Nullable;
  *
  * @param <T> the type of items produced
  */
-public final class ActiveSource<T> {
+public final class SourceTask<T> {
 
 	private static final @Nullable ExecutorService defaultExecutorService = createDefaultExecutorService();
 
@@ -62,7 +62,7 @@ public final class ActiveSource<T> {
 	private volatile boolean started;
 
 
-	private ActiveSource(Producer<T> producer, ExecutorService executorService) {
+	private SourceTask(Producer<T> producer, ExecutorService executorService) {
 		this.producer = producer;
 		this.executorService = executorService;
 	}
@@ -70,14 +70,14 @@ public final class ActiveSource<T> {
 
 	/**
 	 * Set the capacity for the internal {@link Exchange} that the
-	 * {@code Producer} pushes into and that backs the active {@code Source}.
+	 * {@code Producer} pushes into and that backs the {@code Source}.
 	 * <p>The capacity is the number of items the {@code Exchange} holds before
 	 * the producer blocks, and must be greater than zero.
 	 * <p>By default, it is {@value BlockingQueueExchange#DEFAULT_CAPACITY}.
 	 * @param capacity the capacity to use, in number of items
 	 * @return the same instance for chaining
 	 */
-	public ActiveSource<T> capacity(int capacity) {
+	public SourceTask<T> capacity(int capacity) {
 		this.capacity = capacity;
 		return this;
 	}
@@ -119,7 +119,7 @@ public final class ActiveSource<T> {
 	 * @return the created instance
 	 * @throws IllegalStateException if virtual threads are not supported
 	 */
-	public static <T> ActiveSource<T> fromSource(Source<T> source) {
+	public static <T> SourceTask<T> fromSource(Source<T> source) {
 		return fromProducer(Producer.fromSource(source));
 	}
 
@@ -138,7 +138,7 @@ public final class ActiveSource<T> {
 	 * is responsible for managing its lifecycle.
 	 * @return the created instance
 	 */
-	public static <T> ActiveSource<T> fromSource(Source<T> source, ExecutorService executorService) {
+	public static <T> SourceTask<T> fromSource(Source<T> source, ExecutorService executorService) {
 		return fromProducer(Producer.fromSource(source), executorService);
 	}
 
@@ -151,7 +151,7 @@ public final class ActiveSource<T> {
 	 * @return the created instance
 	 * @throws IllegalStateException if virtual threads are not supported
 	 */
-	public static <T> ActiveSource<T> fromProducer(Producer<T> producer) {
+	public static <T> SourceTask<T> fromProducer(Producer<T> producer) {
 		ExecutorService executorService = defaultExecutorService;
 		if (executorService == null) {
 			throw new IllegalStateException(
@@ -175,8 +175,8 @@ public final class ActiveSource<T> {
 	 * is responsible for managing its lifecycle.
 	 * @return the created instance
 	 */
-	public static <T> ActiveSource<T> fromProducer(Producer<T> producer, ExecutorService executorService) {
-		return new ActiveSource<>(producer, executorService);
+	public static <T> SourceTask<T> fromProducer(Producer<T> producer, ExecutorService executorService) {
+		return new SourceTask<>(producer, executorService);
 	}
 
 

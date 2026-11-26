@@ -1,7 +1,7 @@
 
 There are cases where *stream-source* needs to stop a background task it started:
 
-- [ActiveSource](src/main/java/io/spring/streamsource/task/ActiveSource.java) runs a producer task that must be stopped if the consumer goes away.
+- [SourceTask](src/main/java/io/spring/streamsource/task/SourceTask.java) runs a producer task that must be stopped if the consumer goes away.
 - [FlowSourceAdapter](src/main/java/io/spring/streamsource/flow/FlowSourceAdapter.java) runs a task to receive from a `Source`,
   and it must be stopped if the downstream `Subscriber` cancels.
 
@@ -142,8 +142,8 @@ Some wait mechanisms ignore interrupts completely:
 
 # What This Means for stream-source
 
-When an `ActiveSource` is closed, the background producer task is interrupted.
-When a `Flow.Publisher` is cancelled, the background receiving task is interrupted.
+When `SourceTask` is closed, the background producer task is interrupted.
+When `Flow.Publisher` is cancelled, the background receiving task is interrupted.
 The interrupt may or may not take effect immediately, as described in the previous section [Support for Interruption](#interrupt-support-in-jdk-libraries-).
 
 It works significantly better on Java 21+, where tasks run on virtual threads by default, and therefore blocking operations on classic socket I/O respond to interrupts.

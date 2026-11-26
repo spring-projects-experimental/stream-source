@@ -1,7 +1,7 @@
 /**
  * Task layer over the core abstractions to stream data, including:
  * <ul>
- * <li>{@link io.spring.streamsource.task.ActiveSource}, which runs a
+ * <li>{@link io.spring.streamsource.task.SourceTask}, which runs a
  * {@link io.spring.streamsource.task.Producer} on a background thread
  * to decouple production from consumption.
  * <li>{@link io.spring.streamsource.task.MultiSink}, which runs a backround

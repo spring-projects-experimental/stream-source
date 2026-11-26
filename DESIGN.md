@@ -8,7 +8,7 @@ The key building blocks are:
 
 - [Source](#source): used by a consumer to receive in a loop, and implemented to produce the items.
 - [Exchange](#exchange): a pipe with [Sink](#sink) side for sending and a `Source` side for receiving.
-- [ActiveSource](#activesource): starts a [Producer](#producer) task in a background thread to push into an `Exchange` that a consumer can receive from.
+- [SourceTask](#sourcetask): starts a [Producer](#producer) task in a background thread to push into an `Exchange` that a consumer can receive from.
 - [MultiSink](#multisink): dispatches items pushed into a `Sink` to any number of `Sink` listeners concurrently, without holding up the producer.
 - [Reactive Streams](#reactive-streams-adapters): bridge to Reactive Streams `Publisher` in both directions.
 
@@ -115,19 +115,19 @@ The producer can send items and signal completion only.
 Once items are placed in the `Exchange`, they belong to the consumer who can receive or discard them.
 
 
-# ActiveSource
+# SourceTask
 
 `Exchange` provides the means to share a stream of data between two threads.
 A common pattern is to start a producer task in a background thread and consume in the current thread.
 
-[ActiveSource](src/main/java/io/spring/streamsource/task/ActiveSource.java) is the mechanism for this.
+[SourceTask](src/main/java/io/spring/streamsource/task/SourceTask.java) is the mechanism for this.
 It creates an `Exchange`, starts a producer task to push items into it, and returns the `Source` side of the `Exchange` to receive from.
 
 ```java
 Source<String> producingSource = ... // implementation of Source;
-ActiveSource<String> activeSource = ActiveSource.fromSource(producingSource);
+SourceTask<String> sourceTask = SourceTask.fromSource(producingSource);
 
-try (Source<String> source = activeSource.start()) {
+try (Source<String> source = sourceTask.start()) {
     while (source.receiveNext()) {
         String item = source.next();
         // process item
@@ -135,7 +135,7 @@ try (Source<String> source = activeSource.start()) {
 }
 ```
 
-The lifecycle of the producer thread is managed by `ActiveSource`.
+The lifecycle of the producer thread is managed by `SourceTask`.
 The `close()` method of the returned `Source` cancels the producer task and awaits its completion.
 Cancelling interrupts the producer task, and `close()` returns once the task responds, see [CANCELLATION.md](CANCELLATION.md).
 
@@ -146,13 +146,13 @@ For earlier versions, an `ExecutorService` is expected to be passed in.
 ## Producer
 
 [Producer](src/main/java/io/spring/streamsource/task/Producer.java) is a simple contract for pushing items into a `Sink`.
-It is necessary in `ActiveSource` to define the producer task to run in the background.
+It is necessary in `SourceTask` to define the producer task to run in the background.
 
 You can turn any `Source` into a producer task through a static, factory method on `Producer`.
 The loop to bridge from `Source` to `Sink` is trivial.
-`ActiveSource` accepts `Source` or `Producer` for the producer task.
+`SourceTask` accepts `Source` or `Producer` for the producer task.
 
-While the main purpose of `Producer` is to define a producer task for `ActiveSource`, it is also an alternative way to produce items (push style) vs. a `Source` implementation.
+While the main purpose of `Producer` is to define a producer task for `SourceTask`, it is also an alternative way to produce items (push style) vs. a `Source` implementation.
 This creates a choice and a question which one to use.
 
 For more context, see the answer to the Source vs. Producer question in [FAQ.md](FAQ.md#should-a-producer-implement-source-or-producer).

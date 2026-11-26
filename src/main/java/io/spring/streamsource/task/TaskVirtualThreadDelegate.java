@@ -6,7 +6,7 @@ import java.util.concurrent.ExecutorService;
  * Internal delegate for virtual thread handling on JDK 21.
  * This is a dummy version for reachability on JDK <21.
  *
- * @see ActiveSource
+ * @see SourceTask
  */
 final class TaskVirtualThreadDelegate {
 

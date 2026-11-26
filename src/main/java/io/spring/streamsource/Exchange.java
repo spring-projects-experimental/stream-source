@@ -43,10 +43,10 @@ package io.spring.streamsource;
  * <a href="https://github.com/spring-projects-experimental/stream-source/blob/main/CANCELLATION.md">CANCELLATION.md</a>.
  *
  * <p>To run a producer in the background and receive from the Exchange,
- * see {@link io.spring.streamsource.task.ActiveSource}.
+ * see {@link io.spring.streamsource.task.SourceTask}.
  *
  * @see BlockingQueueExchange
- * @see io.spring.streamsource.task.ActiveSource
+ * @see io.spring.streamsource.task.SourceTask
  *
  * @param <T> the type of items passed through the Exchange
  */

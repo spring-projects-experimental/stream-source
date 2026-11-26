@@ -36,7 +36,7 @@ import java.io.IOException;
  * between an independent producer and consumer.
  * {@link io.spring.streamsource.task.Producer} is a contract for a producer
  * task that can be launched as a background task through
- * {@link io.spring.streamsource.task.ActiveSource}.
+ * {@link io.spring.streamsource.task.SourceTask}.
  *
  * @param <T> the type of items sent to the Sink
  * @see Exchange

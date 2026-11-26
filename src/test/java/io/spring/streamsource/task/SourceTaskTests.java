@@ -21,9 +21,9 @@ import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 /**
- * Unit tests for {@link ActiveSource}.
+ * Unit tests for {@link SourceTask}.
  */
-public class ActiveSourceTests {
+public class SourceTaskTests {
 
 
 	@Test
@@ -36,9 +36,9 @@ public class ActiveSourceTests {
 
 	@Test
 	public void startWorksOnceOnly() {
-		ActiveSource<String> activeSource = ActiveSource.fromProducer(sink -> {});
-		try (Source<String> source = activeSource.start()) {
-			assertThatIllegalStateException().isThrownBy(activeSource::start).withMessage("Already started");
+		SourceTask<String> sourceTask = SourceTask.fromProducer(sink -> {});
+		try (Source<String> source = sourceTask.start()) {
+			assertThatIllegalStateException().isThrownBy(sourceTask::start).withMessage("Already started");
 		}
 	}
 
@@ -132,7 +132,7 @@ public class ActiveSourceTests {
 			}
 		};
 
-		try (Source<String> source = ActiveSource.fromProducer(producer).capacity(1).start()) {
+		try (Source<String> source = SourceTask.fromProducer(producer).capacity(1).start()) {
 			cancelledTaskDone.await();
 			assertThat(toList(source)).containsExactly("a", "c", "d");
 		}
@@ -146,9 +146,9 @@ public class ActiveSourceTests {
 	}
 
 	private static <T> Source<T> startProducer(Producer<T> producer, @Nullable ExecutorService executor) {
-		ActiveSource<T> activeSource = (executor != null ?
-				ActiveSource.fromProducer(producer, executor) : ActiveSource.fromProducer(producer));
-		return activeSource.start();
+		SourceTask<T> sourceTask = (executor != null ?
+				SourceTask.fromProducer(producer, executor) : SourceTask.fromProducer(producer));
+		return sourceTask.start();
 	}
 
 }
