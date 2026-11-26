@@ -32,7 +32,7 @@ import org.slf4j.LoggerFactory;
  * {@link #unregisterListener(Sink) unregistered} dynamically at any time.
  * A listener that raises an exception is completed and removed from the list.
  *
- * <p>Use static factory methods to create a {@code MultiSink}, and call
+ * <p>Use static factory methods to create a {@code MultiSinkTask}, and call
  * {@link #start()} to launch the fanout task and obtain the {@code Sink} to
  * push items into.
  *
@@ -48,9 +48,9 @@ import org.slf4j.LoggerFactory;
  *
  * @param <T> the type of items passed to the listeners
  */
-public final class MultiSink<T> {
+public final class MultiSinkTask<T> {
 
-	private static final Logger logger = LoggerFactory.getLogger(MultiSink.class);
+	private static final Logger logger = LoggerFactory.getLogger(MultiSinkTask.class);
 
 	private static final @Nullable ExecutorService defaultExecutorService = createDefaultExecutorService();
 
@@ -66,7 +66,7 @@ public final class MultiSink<T> {
 	private volatile @Nullable Future<?> future;
 
 
-	private MultiSink(List<Sink<T>> listeners, ExecutorService executorService) {
+	private MultiSinkTask(List<Sink<T>> listeners, ExecutorService executorService) {
 		this.listenerRegistry = new ListenerRegistry<>(listeners);
 		this.executorService = executorService;
 	}
@@ -78,7 +78,7 @@ public final class MultiSink<T> {
 	 * @param capacity the capacity to use
 	 * @return the same instance for chaining
 	 */
-	public MultiSink<T> capacity(int capacity) {
+	public MultiSinkTask<T> capacity(int capacity) {
 		this.capacity = capacity;
 		return this;
 	}
@@ -177,7 +177,7 @@ public final class MultiSink<T> {
 	 * @param <T> the type of items produced
 	 * @throws IllegalStateException if virtual threads are not supported
 	 */
-	public static <T> MultiSink<T> of(List<Sink<T>> sinks) {
+	public static <T> MultiSinkTask<T> of(List<Sink<T>> sinks) {
 		ExecutorService executorService = defaultExecutorService;
 		if (executorService == null) {
 			throw new IllegalStateException(
@@ -198,8 +198,8 @@ public final class MultiSink<T> {
 	 * @return the created instance
 	 * @param <T> the type of items produced
 	 */
-	public static <T> MultiSink<T> of(List<Sink<T>> sinks, ExecutorService executorService) {
-		return new MultiSink<>(sinks, executorService);
+	public static <T> MultiSinkTask<T> of(List<Sink<T>> sinks, ExecutorService executorService) {
+		return new MultiSinkTask<>(sinks, executorService);
 	}
 
 
@@ -239,7 +239,7 @@ public final class MultiSink<T> {
 			if (!claimStart()) {
 				return;
 			}
-			ListenerRegistry<T> registry = MultiSink.this.listenerRegistry;
+			ListenerRegistry<T> registry = MultiSinkTask.this.listenerRegistry;
 			Throwable cause = null;
 			try {
 				registry.applyChanges();
@@ -266,10 +266,10 @@ public final class MultiSink<T> {
 		}
 
 		private void dispatch(T item) throws InterruptedException {
-			List<Sink<T>> listeners = MultiSink.this.listenerRegistry.listeners();
+			List<Sink<T>> listeners = MultiSinkTask.this.listenerRegistry.listeners();
 			List<Future<@Nullable Void>> futures = new ArrayList<>(listeners.size());
 			for (Sink<T> sink : listeners) {
-				futures.add(MultiSink.this.executorService.submit(() -> {
+				futures.add(MultiSinkTask.this.executorService.submit(() -> {
 					sink.send(item);
 					return null;
 				}));
@@ -289,7 +289,7 @@ public final class MultiSink<T> {
 				catch (InterruptedException ex) {
 					Thread.currentThread().interrupt();
 					iterator.remove();
-					sink.completeExceptionally(new RuntimeException("MultiSink send interrupted", ex));
+					sink.completeExceptionally(new RuntimeException("MultiSinkTask send interrupted", ex));
 				}
 				if (Thread.interrupted()) {
 					throw new InterruptedException();
@@ -301,11 +301,11 @@ public final class MultiSink<T> {
 			completeRemainingListeners(cause);
 			this.exchange.close();
 			this.completionLatch.countDown();
-			MultiSink.this.listenerRegistry.completeStagedAdditions();
+			MultiSinkTask.this.listenerRegistry.completeStagedAdditions();
 		}
 
 		private void completeRemainingListeners(@Nullable Throwable cause) {
-			for (Sink<T> sink : MultiSink.this.listenerRegistry.listeners()) {
+			for (Sink<T> sink : MultiSinkTask.this.listenerRegistry.listeners()) {
 				try {
 					if (cause != null) {
 						sink.completeExceptionally(cause);
@@ -326,7 +326,7 @@ public final class MultiSink<T> {
 		 */
 		public void cancelIfNotStarted() {
 			if (claimStart()) {
-				finish(new CancellationException("MultiSink cancelled before start"));
+				finish(new CancellationException("MultiSinkTask cancelled before start"));
 			}
 		}
 
@@ -344,7 +344,7 @@ public final class MultiSink<T> {
 	 *
 	 * <p>Staged updates are applied only by the fanout thread prior to each
 	 * dispatch while additions and removals may be staged at any tie by other
-	 * threads via top-level, public methods on {@link MultiSink}.
+	 * threads via top-level, public methods on {@link MultiSinkTask}.
 	 */
 	private static final class ListenerRegistry<T> {
 
@@ -403,7 +403,7 @@ public final class MultiSink<T> {
 		/**
 		 * Complete any listener staged for addition.
 		 * For use after the fanout task has ended, from both
-		 * {@link MultiSink#registerListener} the fanout task to ensure that
+		 * {@link MultiSinkTask#registerListener} the fanout task to ensure that
 		 * all listeners added late are completed.
 		 */
 		public void completeStagedAdditions() {

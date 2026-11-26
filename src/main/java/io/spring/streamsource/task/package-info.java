@@ -4,7 +4,7 @@
  * <li>{@link io.spring.streamsource.task.SourceTask}, which runs a
  * {@link io.spring.streamsource.task.Producer} on a background thread
  * to decouple production from consumption.
- * <li>{@link io.spring.streamsource.task.MultiSink}, which runs a backround
+ * <li>{@link io.spring.streamsource.task.MultiSinkTask}, which runs a backround
  * task to fan out items to a list of {@link io.spring.streamsource.Sink}
  * listeners.
  * </ul>

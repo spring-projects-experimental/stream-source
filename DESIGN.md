@@ -9,7 +9,7 @@ The key building blocks are:
 - [Source](#source): used by a consumer to receive in a loop, and implemented to produce the items.
 - [Exchange](#exchange): a pipe with [Sink](#sink) side for sending and a `Source` side for receiving.
 - [SourceTask](#sourcetask): starts a [Producer](#producer) task in a background thread to push into an `Exchange` that a consumer can receive from.
-- [MultiSink](#multisink): dispatches items pushed into a `Sink` to any number of `Sink` listeners concurrently, without holding up the producer.
+- [MultiSinkTask](#multisinktask): dispatches items pushed into a `Sink` to any number of `Sink` listeners concurrently, without holding up the producer.
 - [Reactive Streams](#reactive-streams-adapters): bridge to Reactive Streams `Publisher` in both directions.
 
 For further insight and context, see [FAQ.md](FAQ.md).
@@ -158,7 +158,7 @@ This creates a choice and a question which one to use.
 For more context, see the answer to the Source vs. Producer question in [FAQ.md](FAQ.md#should-a-producer-implement-source-or-producer).
 
 
-# MultiSink
+# MultiSinkTask
 
 `Exchange` connects producer and consumer, but sometimes there may be multiple consumers.
 For example, to notify listeners about streamed items, or for pub-sub to deliver streamed items to independent subscribers.
@@ -168,7 +168,7 @@ For example, to notify listeners about streamed items, or for pub-sub to deliver
 1. It's inefficient to invoke blocking listeners in a sequence.
 2. The producer is coupled to listener invocation.
 
-[MultiSink](src/main/java/io/spring/streamsource/task/MultiSink.java) is a mechanism for this.
+[MultiSinkTask](src/main/java/io/spring/streamsource/task/MultiSinkTask.java) is a mechanism for this.
 It creates a `Sink` backed by an `Exchange`, starts a background thread to receive from it, and passes every item to all listeners concurrently in fork and join style.
 
 ```
@@ -191,14 +191,14 @@ Use `cancel()` to stop it early, which interrupts the fan-out task and any liste
 Sink<String> listener1 = ... // e.g. an Exchange for another consumer
 Sink<String> listener2 = ...
 
-MultiSink<String> multiSink = MultiSink.of(List.of(listener1, listener2));
-Sink<String> sink = multiSink.start();
+MultiSinkTask<String> multiSinkTask = MultiSinkTask.of(List.of(listener1, listener2));
+Sink<String> sink = multiSinkTask.start();
 
 sink.send("one");
 sink.send("two");
 sink.complete();
 
-multiSink.awaitCompletion();
+multiSinkTask.awaitCompletion();
 ```
 
 A listener that throws an exception is completed exceptionally and removed, without affecting the other listeners.
@@ -208,7 +208,7 @@ For earlier versions, an `ExecutorService` is expected to be passed in.
 
 ## Dynamic registrations
 
-`MultiSink` accepts dynamic registration of listeners after it has started.
+`MultiSinkTask` accepts dynamic registration of listeners after it has started.
 This is useful for pub-sub on a server where listeners come and go.
 
 

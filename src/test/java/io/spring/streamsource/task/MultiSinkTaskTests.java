@@ -16,9 +16,9 @@ import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 /**
- * Unit tests for {@link MultiSink}.
+ * Unit tests for {@link MultiSinkTask}.
  */
-public class MultiSinkTests {
+public class MultiSinkTaskTests {
 
 
 	@Test
@@ -26,14 +26,14 @@ public class MultiSinkTests {
 		TestSink<String> sink1 = TestSink.create();
 		TestSink<String> sink2 = TestSink.create();
 
-		MultiSink<String> multiSink = MultiSink.of(List.of(sink1, sink2));
+		MultiSinkTask<String> multiSinkTask = MultiSinkTask.of(List.of(sink1, sink2));
 
-		Sink<String> sink = multiSink.start();
+		Sink<String> sink = multiSinkTask.start();
 		sink.send("a");
 		sink.send("b");
 		sink.complete();
 
-		multiSink.awaitCompletion();
+		multiSinkTask.awaitCompletion();
 
 		assertThat(sink1.getSentItems()).containsExactly("a", "b");
 		assertThat(sink1.getCompletionException()).isNull();
@@ -48,15 +48,15 @@ public class MultiSinkTests {
 		TestSink<String> sink1 = TestSink.create();
 		TestSink<String> sink2 = TestSink.create();
 
-		MultiSink<String> multiSink = MultiSink.of(List.of(sink1, sink2));
+		MultiSinkTask<String> multiSinkTask = MultiSinkTask.of(List.of(sink1, sink2));
 
-		Sink<String> sink = multiSink.start();
+		Sink<String> sink = multiSinkTask.start();
 		sink.send("a");
 		sink.send("b");
 		sink.completeExceptionally(ex);
 		sink.complete();
 
-		multiSink.awaitCompletion();
+		multiSinkTask.awaitCompletion();
 
 		assertThat(sink1.getSentItems()).containsExactly("a", "b");
 		assertThat(sink1.getCompletionException()).isSameAs(ex);
@@ -72,15 +72,15 @@ public class MultiSinkTests {
 		TestSink<String> sink1 = TestSink.create();
 		TestSink<String> sink2 = TestSink.<String>create().exceptionOnItem("b", ex);
 
-		MultiSink<String> multiSink = MultiSink.of(List.of(sink2, sink1));
+		MultiSinkTask<String> multiSinkTask = MultiSinkTask.of(List.of(sink2, sink1));
 
-		Sink<String> sink = multiSink.start();
+		Sink<String> sink = multiSinkTask.start();
 		sink.send("a");
 		sink.send("b");
 		sink.send("c");
 		sink.complete();
 
-		multiSink.awaitCompletion();
+		multiSinkTask.awaitCompletion();
 
 		assertThat(sink1.getSentItems()).containsExactly("a", "b", "c");
 		assertThat(sink1.getCompletionException()).isNull();
@@ -97,15 +97,15 @@ public class MultiSinkTests {
 		TestSink<String> sink2 = TestSink.<String>create().exceptionOnItem("b", ex);
 		TestSink<String> sink3 = TestSink.<String>create().exceptionOnItem("c", ex);
 
-		MultiSink<String> multiSink = MultiSink.of(List.of(sink1, sink2, sink3));
+		MultiSinkTask<String> multiSinkTask = MultiSinkTask.of(List.of(sink1, sink2, sink3));
 
-		Sink<String> sink = multiSink.start();
+		Sink<String> sink = multiSinkTask.start();
 		sink.send("a");
 		sink.send("b");
 		sink.send("c");
 		sink.complete();
 
-		multiSink.awaitCompletion();
+		multiSinkTask.awaitCompletion();
 
 		assertThat(sink1.getSentItems()).containsExactly("a");
 		assertThat(sink1.getCompletionException()).isSameAs(ex);
@@ -122,16 +122,16 @@ public class MultiSinkTests {
 		TestSink<String> sink1 = TestSink.create();
 		TestSink<String> sink2 = TestSink.create();
 
-		MultiSink<String> multiSink = MultiSink.of(List.of(sink1));
-		multiSink.registerListener(sink2);
-		multiSink.unregisterListener(sink1);
+		MultiSinkTask<String> multiSinkTask = MultiSinkTask.of(List.of(sink1));
+		multiSinkTask.registerListener(sink2);
+		multiSinkTask.unregisterListener(sink1);
 
-		Sink<String> sink = multiSink.start();
+		Sink<String> sink = multiSinkTask.start();
 		sink.send("a");
 		sink.send("b");
 		sink.complete();
 
-		multiSink.awaitCompletion();
+		multiSinkTask.awaitCompletion();
 
 		assertThat(sink1.getSentItems()).isEmpty();
 		assertThat(sink1.isComplete()).isTrue();
@@ -149,16 +149,16 @@ public class MultiSinkTests {
 		TestSink<String> sink2 = TestSink.create();
 		TestSink<String> sink3 = TestSink.create();
 
-		MultiSink<String> multiSink = MultiSink.of(List.of(sink1, sink2));
+		MultiSinkTask<String> multiSinkTask = MultiSinkTask.of(List.of(sink1, sink2));
 
-		Sink<String> sink = multiSink.start();
+		Sink<String> sink = multiSinkTask.start();
 		sink.send("a");
 		latch.await();                  // dispatch of "a" is in progress
-		multiSink.registerListener(sink3);  // cannot be applied until that dispatch returns
+		multiSinkTask.registerListener(sink3);  // cannot be applied until that dispatch returns
 		sink.send("b");                 // so the next dispatch always sees the addition
 		sink.complete();
 
-		multiSink.awaitCompletion();
+		multiSinkTask.awaitCompletion();
 
 		assertThat(sink1.getSentItems()).containsExactly("a", "b");
 		assertThat(sink2.getSentItems()).containsExactly("a", "b");
@@ -175,16 +175,16 @@ public class MultiSinkTests {
 		TestSink<String> sink1 = TestSink.<String>create().itemHandler("a", _ -> latch.countDown());
 		TestSink<String> sink2 = TestSink.create();
 
-		MultiSink<String> multiSink = MultiSink.of(List.of(sink1, sink2));
+		MultiSinkTask<String> multiSinkTask = MultiSinkTask.of(List.of(sink1, sink2));
 
-		Sink<String> sink = multiSink.start();
+		Sink<String> sink = multiSinkTask.start();
 		sink.send("a");
 		latch.await();
-		multiSink.unregisterListener(sink2);
+		multiSinkTask.unregisterListener(sink2);
 		sink.send("b");
 		sink.complete();
 
-		multiSink.awaitCompletion();
+		multiSinkTask.awaitCompletion();
 
 		assertThat(sink1.getSentItems()).containsExactly("a", "b");
 		assertThat(sink1.getCompletionException()).isNull();
@@ -201,17 +201,17 @@ public class MultiSinkTests {
 		TestSink<String> sink1 = TestSink.<String>create().itemHandler("a", _ -> latch.countDown());
 		TestSink<String> sink2 = TestSink.create();
 
-		MultiSink<String> multiSink = MultiSink.of(List.of(sink1));
+		MultiSinkTask<String> multiSinkTask = MultiSinkTask.of(List.of(sink1));
 
-		Sink<String> sink = multiSink.start();
+		Sink<String> sink = multiSinkTask.start();
 		sink.send("a");
 		latch.await();
-		multiSink.registerListener(sink2);     // both staged, applied by the same
-		multiSink.unregisterListener(sink2);  // drain: the addition first, then the removal
+		multiSinkTask.registerListener(sink2);     // both staged, applied by the same
+		multiSinkTask.unregisterListener(sink2);  // drain: the addition first, then the removal
 		sink.send("b");
 		sink.complete();
 
-		multiSink.awaitCompletion();
+		multiSinkTask.awaitCompletion();
 
 		assertThat(sink1.getSentItems()).containsExactly("a", "b");
 
@@ -225,15 +225,15 @@ public class MultiSinkTests {
 		TestSink<String> sink1 = TestSink.create();
 		TestSink<String> sink2 = TestSink.create();
 
-		MultiSink<String> multiSink = MultiSink.of(List.of(sink1));
+		MultiSinkTask<String> multiSinkTask = MultiSinkTask.of(List.of(sink1));
 
-		Sink<String> sink = multiSink.start();
+		Sink<String> sink = multiSinkTask.start();
 		sink.send("a");
 		sink.complete();
 
-		multiSink.awaitCompletion();
+		multiSinkTask.awaitCompletion();
 
-		multiSink.registerListener(sink2);
+		multiSinkTask.registerListener(sink2);
 
 		assertThat(sink2.getSentItems()).isEmpty();
 		assertThat(sink2.isComplete()).isTrue();
@@ -246,16 +246,16 @@ public class MultiSinkTests {
 
 		TestSink<String> sink1 = TestSink.<String>create().itemHandler("a", _ -> latch.countDown());
 
-		MultiSink<String> multiSink = MultiSink.of(List.of(sink1));
+		MultiSinkTask<String> multiSinkTask = MultiSinkTask.of(List.of(sink1));
 
-		Sink<String> sink = multiSink.start();
+		Sink<String> sink = multiSinkTask.start();
 		sink.send("a");
 		latch.await();
-		multiSink.unregisterListener(sink1);
+		multiSinkTask.unregisterListener(sink1);
 		sink.send("b");  // unblocks the task so it can apply the removal
 		sink.complete();
 
-		multiSink.awaitCompletion();
+		multiSinkTask.awaitCompletion();
 
 		assertThat(sink1.getSentItems()).containsExactly("a");
 		assertThat(sink1.isComplete()).isTrue();
@@ -266,14 +266,14 @@ public class MultiSinkTests {
 	public void taskStaysAliveWithoutListeners() throws IOException, InterruptedException {
 		TestSink<String> sink1 = TestSink.create();
 
-		MultiSink<String> multiSink = MultiSink.of(List.of());
+		MultiSinkTask<String> multiSinkTask = MultiSinkTask.of(List.of());
 
-		Sink<String> sink = multiSink.start();
-		multiSink.registerListener(sink1);
+		Sink<String> sink = multiSinkTask.start();
+		multiSinkTask.registerListener(sink1);
 		sink.send("a");
 		sink.complete();
 
-		multiSink.awaitCompletion();
+		multiSinkTask.awaitCompletion();
 
 		assertThat(sink1.getSentItems()).containsExactly("a");
 		assertThat(sink1.isComplete()).isTrue();
@@ -281,10 +281,10 @@ public class MultiSinkTests {
 
 	@Test
 	public void startTwice() {
-		MultiSink<String> multiSink = MultiSink.of(List.of(TestSink.create()));
-		multiSink.start();
+		MultiSinkTask<String> multiSinkTask = MultiSinkTask.of(List.of(TestSink.create()));
+		multiSinkTask.start();
 
-		assertThatIllegalStateException().isThrownBy(multiSink::start).withMessage("Already started");
+		assertThatIllegalStateException().isThrownBy(multiSinkTask::start).withMessage("Already started");
 	}
 
 
@@ -299,16 +299,16 @@ public class MultiSinkTests {
 			Thread.sleep(Duration.ofMinutes(30));
 		});
 
-		MultiSink<String> multiSink = MultiSink.of(List.of(sink1, sink2, sink3));
-		Sink<String> sink = multiSink.start();
+		MultiSinkTask<String> multiSinkTask = MultiSinkTask.of(List.of(sink1, sink2, sink3));
+		Sink<String> sink = multiSinkTask.start();
 		sink.send("a");
 		sink.send("b");
 		sink.send("c");
 		sink.complete();
 
 		latch.await();
-		multiSink.cancel();
-		multiSink.awaitCompletion();
+		multiSinkTask.cancel();
+		multiSinkTask.awaitCompletion();
 
 		assertThat(sink1.getSentItems()).contains("a");
 		assertThat(sink2.getSentItems()).contains("a");
@@ -329,11 +329,11 @@ public class MultiSinkTests {
 			});
 
 			TestSink<String> listener = TestSink.create();
-			MultiSink<String> multiSink = MultiSink.of(List.of(listener), executor);
-			multiSink.start();
+			MultiSinkTask<String> multiSinkTask = MultiSinkTask.of(List.of(listener), executor);
+			multiSinkTask.start();
 
-			multiSink.cancel();
-			assertTimeoutPreemptively(Duration.ofSeconds(5), multiSink::awaitCompletion);
+			multiSinkTask.cancel();
+			assertTimeoutPreemptively(Duration.ofSeconds(5), multiSinkTask::awaitCompletion);
 			latch.countDown();
 
 			assertThat(listener.getCompletionException()).isNotNull();
