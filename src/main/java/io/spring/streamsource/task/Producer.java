@@ -27,6 +27,9 @@ import io.spring.streamsource.Source;
  * Exchange, while a consumer receives on the current thread. This pattern is
  * supported by {@link ActiveSource}.
  *
+ * <p><strong>Note:</strong> Producers should not assume that {@code Sink}
+ * supports concurrent, see the Javadoc of {@link Sink}.
+ *
  * @param <T> the type of items produced
  * @see Source
  * @see ActiveSource
@@ -41,6 +44,8 @@ public interface Producer<T> {
 	 * the caller to decide when to do so. Implementations may handle exceptions
 	 * or let them propagate. Generally, a caller is expected to use
 	 * {@link #produceAndComplete(Sink)} if necessary to guarantee Sink completion.
+	 * <p><strong>Note:</strong> Producers should not assume that {@code Sink}
+	 * supports concurrent, see the Javadoc of {@link Sink}.
 	 * @param sink the Sink to push items into
 	 * @throws Throwable an error encountered by the producer, which the caller
 	 * may use to complete the {@code Sink} exceptionally
