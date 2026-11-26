@@ -3,9 +3,10 @@ package io.spring.streamsource;
 import java.io.IOException;
 
 /**
- * Contract to receive a stream of items in an imperative loop. Similar to
- * {@link java.util.Iterator}, but for items that may be received from a remote
- * host, with a connection lifecycle and potential network failures.
+ * Contract to receive a stream of items in an imperative loop. In contrast to
+ * iteration over locally available items, {@code Source} is designed to receive
+ * items from a remote host, with a connection lifecycle and potential network
+ * failures.
  *
  * <p>Call {@link #receiveNext()} to receive an item, and {@link #next()} to
  * access it. The stream ends when {@code receiveNext()} returns {@code false}

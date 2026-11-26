@@ -18,8 +18,7 @@ For further insight and context, see [FAQ.md](FAQ.md).
 # Source
 
 [Source](src/main/java/io/spring/streamsource/Source.java) is the most central contract.
-A consumer uses it to receive items in a loop.
-It has the simplicity of `Iterator`, but for data items received from a remote target.
+A consumer uses it to receive items in a loop where items may be received over a network.
 It is `AutoCloseable` to release underlying resources such as a connection.
 
 - `receiveNext()` does the actual work to receive the next item. 

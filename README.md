@@ -7,7 +7,7 @@ There is currently no simple, standard way to do that in Java in imperative styl
 
 Historically in Java, we have streamed data through callback interfaces.
 Callbacks are good for asynchronous handling.
-For imperative code we prefer a simple loop that blocks, similar to `Iterator` but for items fetched over a network.
+For imperative code we prefer a simple loop that blocks to receive items over a network.
 More than API style, we need support for independent producer-consumer, and other essential patterns.
 
 *stream-source* is a small library that aims to fill this gap.
