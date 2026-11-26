@@ -29,7 +29,7 @@ For more details, see [DESIGN.md](DESIGN.md) and [FAQ.md](FAQ.md).
 - [stream-source Spring extensions](https://github.com/spring-projects-experimental/stream-source-spring-extensions) --
   Spring project extensions that use *stream-source*.
 - Spring AI Agent --
-  Agentic abstraction for Spring AI that uses *stream-source* for its streaming API (to be made public shortly).
+  Agentic abstraction for Spring AI that uses *stream-source* for its streaming API (to be made public December 3).
 
 
 ## Requirements and Use
