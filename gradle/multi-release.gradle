@@ -24,3 +24,11 @@ jar {
 		attributes('Multi-Release': 'true')
 	}
 }
+
+tasks.withType(Jar).configureEach {
+	if (name == 'sourcesJar') {
+		into('META-INF/versions/21') {
+			from sourceSets.java21.allJava
+		}
+	}
+}

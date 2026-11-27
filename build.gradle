@@ -13,6 +13,8 @@ java {
 	toolchain {
 		languageVersion = JavaLanguageVersion.of(25)
 	}
+	withSourcesJar()
+	withJavadocJar()
 }
 
 repositories {
@@ -43,6 +45,14 @@ dependencies {
 // which compiling against the Java 25 toolchain would otherwise let through.
 compileJava {
 	options.release = 17
+}
+
+javadoc {
+	options.encoding = 'UTF-8'
+	options.addStringOption('-release', '17')
+	options.addBooleanOption('Xdoclint:all,-missing', true)
+	options.addBooleanOption('quiet', true)
+	options.addBooleanOption('-no-fonts', true)
 }
 
 test {
